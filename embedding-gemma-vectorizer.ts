@@ -1,7 +1,7 @@
 // Production-ready EmbeddingGemma implementation based on semantic-galaxy
 // Includes WebGPU/WASM detection, singleton caching, and adaptive batching
 
-import { env, AutoModel, AutoTokenizer, type PreTrainedModel, type PreTrainedTokenizer, type ProgressInfo } from '@xenova/transformers';
+import { env, AutoModel, AutoTokenizer, type PreTrainedModel, type PreTrainedTokenizer, type ProgressInfo } from '@huggingface/transformers';
 import { generateQueryFDE, generateDocumentFDE, DEFAULT_FDE_CONFIG } from './fde-algorithm.js';
 
 interface EmbeddingGemmaConfig {
