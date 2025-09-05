@@ -312,6 +312,58 @@ Example: 1,000 documents
 - **Python Reference:** [sionic-ai/muvera-py](https://github.com/sionic-ai/muvera-py)
 - **Google C++ Implementation:** [google/graph-mining](https://github.com/google/graph-mining/tree/main/sketching/point_cloud)
 - **Weaviate Integration:** [More efficient multi-vector embeddings with MUVERA](https://weaviate.io/blog/muvera)
+- **Gemma Cookbook RAG:** [Gemma 3 RAG with EmbeddingGemma](https://github.com/google-gemini/gemma-cookbook/blob/main/Gemma/%5BGemma_3%5DRAG_with_EmbeddingGemma.ipynb)
+
+### Enhanced Embedding Models
+- **EmbeddingGemma Overview:** [Google AI EmbeddingGemma Documentation](https://ai.google.dev/gemma/docs/embeddinggemma) - 308M parameter on-device embedding model
+- **Browser Implementation:** [EmbeddingGemma with Transformers.js](https://huggingface.co/blog/embeddinggemma) - 100% browser-native embedding generation
+- **Developer Blog:** [Introducing EmbeddingGemma](https://developers.googleblog.com/en/introducing-embeddinggemma/) - Best-in-class open model for on-device embeddings
+- **Sentence Transformers Guide:** [Generate Embeddings with Sentence Transformers](https://ai.google.dev/gemma/docs/embeddinggemma/inference-embeddinggemma-with-sentence-transformers)
+
+#### EmbeddingGemma Capabilities for Browser Enhancement:
+- **State-of-the-Art Performance:** MTEB benchmark leader under 500M parameters with 100+ language support
+- **Ultra-Lightweight:** <200MB RAM with quantization, runs entirely in browser via Transformers.js
+- **High Performance:** <22ms inference on EdgeTPU, <15ms for 256 tokens, perfect for real-time search
+- **Flexible Dimensions:** 768D to 128D output via Matryoshka Representation Learning for speed/quality tradeoffs
+- **Browser-Native RAG:** Direct replacement for hash-based embeddings with semantic understanding
+- **Multilingual Support:** 100+ languages with 2K token context for long documents
+- **Zero Network Dependency:** Complete offline operation after model loading
+
+#### Transformers.js Implementation Guide:
+```javascript
+// Install EmbeddingGemma for browser use
+npm install @xenova/transformers
+
+// Basic browser implementation
+import { pipeline } from '@xenova/transformers';
+
+// Load EmbeddingGemma model (runs entirely in browser)
+const embedder = await pipeline('feature-extraction', 'google/embeddinggemma-300m');
+
+// Generate embeddings with task prompts for optimal performance
+const queryEmbedding = await embedder('Retrieval-query: Your search query here');
+const docEmbedding = await embedder('Retrieval-document: Your document text here');
+
+// Matryoshka Representation Learning - truncate to desired dimensions
+const embedding768 = queryEmbedding[0];  // Full 768 dimensions  
+const embedding256 = embedding768.slice(0, 256);  // 256 dimensions for speed
+const embedding128 = embedding768.slice(0, 128);  // 128 dimensions for memory
+```
+
+#### Performance & Memory Characteristics:
+- **Model Size:** ~308M parameters, <200MB RAM with quantization
+- **Inference Speed:** <15ms for 256 tokens on EdgeTPU, <22ms typical
+- **Embedding Dimensions:** 768D (full) or 512D/256D/128D (MRL truncation)
+- **Context Length:** 2K tokens for long document processing
+- **Language Support:** 100+ languages with multilingual embedding
+- **Browser Compatibility:** ONNX Runtime via Transformers.js, float32/bfloat16
+
+#### Integration with MuVeRa Pipeline:
+The current implementation uses simple hash-based embeddings. EmbeddingGemma could replace this with:
+1. **Semantic Understanding:** Real language comprehension vs. hash approximations
+2. **Multilingual Support:** 100+ languages vs. English-only hashing  
+3. **Quality Improvement:** MTEB benchmark leader vs. basic text processing
+4. **Contextual Embeddings:** 2K token context vs. single-word embeddings
 
 ### Browser Specializations
 See [`MUVERA_IMPLEMENTATION_ANALYSIS.md`](./MUVERA_IMPLEMENTATION_ANALYSIS.md) for detailed analysis of:

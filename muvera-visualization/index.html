@@ -284,6 +284,96 @@
         color: #1976d2;
       }
 
+      /* Mathematical Calculations Section */
+      .calculations-section {
+        background: #f8f9fa;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 30px;
+      }
+
+      .calculations-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 25px;
+        margin-bottom: 25px;
+      }
+
+      .calculation-panel {
+        background: white;
+        border: 2px solid #dadce0;
+        border-radius: 6px;
+        padding: 20px;
+      }
+
+      .calculation-panel h3 {
+        margin: 0 0 15px 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+        font-family: 'Google Sans', sans-serif;
+        border-bottom: 2px solid #e0e0e0;
+        padding-bottom: 8px;
+      }
+
+      .calc-stage {
+        margin-bottom: 15px;
+        padding: 12px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        border-left: 4px solid #4285f4;
+      }
+
+      .calc-stage h4 {
+        margin: 0 0 8px 0;
+        font-size: 14px;
+        font-weight: 500;
+        color: #4285f4;
+        font-family: 'Google Sans', sans-serif;
+      }
+
+      .math-display {
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        background: white;
+        padding: 10px;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        line-height: 1.4;
+        color: #333;
+        white-space: pre-wrap;
+      }
+
+      .similarity-calculation {
+        background: #e3f2fd;
+        border: 2px solid #2196f3;
+        border-radius: 6px;
+        padding: 20px;
+        text-align: center;
+      }
+
+      .similarity-calculation h3 {
+        margin: 0 0 15px 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: #1976d2;
+        font-family: 'Google Sans', sans-serif;
+      }
+
+      .similarity-calculation .math-display {
+        font-size: 16px;
+        font-weight: 500;
+        background: white;
+        border: 2px solid #bbdefb;
+      }
+
+      #final-similarity {
+        color: #d32f2f;
+        font-weight: bold;
+        font-size: 18px;
+      }
+
       /* Responsive design */
       @media (max-width: 1200px) {
         .side-by-side-container {
@@ -291,6 +381,10 @@
         }
         
         .comparison-stats {
+          grid-template-columns: 1fr;
+        }
+        
+        .calculations-grid {
           grid-template-columns: 1fr;
         }
       }
@@ -341,6 +435,61 @@
     <!-- Side-by-Side Query & Document Animation Section -->
     <div class="animation-container">
       <h1 style="text-align: center; margin-bottom: 30px;">MuVeRa FDE Construction - Query vs Document</h1>
+      
+      <!-- Mathematical Calculations Section -->
+      <div class="calculations-section">
+        <h2 style="text-align: center; margin-bottom: 20px; color: #333; font-family: 'Google Sans', sans-serif;">
+          🧮 Live Mathematical Calculations
+        </h2>
+        
+        <div class="calculations-grid">
+          <!-- Query Calculations -->
+          <div class="calculation-panel">
+            <h3>📊 Query Processing (SUM Aggregation)</h3>
+            <div id="query-calculations">
+              <div class="calc-stage">
+                <h4>Step 1: SimHash Projections</h4>
+                <div id="query-simhash-calcs" class="math-display">Loading...</div>
+              </div>
+              <div class="calc-stage">
+                <h4>Step 2: Partition Assignment</h4>
+                <div id="query-partition-calcs" class="math-display">Loading...</div>
+              </div>
+              <div class="calc-stage">
+                <h4>Step 3: Vector Aggregation (SUM)</h4>
+                <div id="query-aggregation-calcs" class="math-display">Loading...</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Document Calculations -->
+          <div class="calculation-panel">
+            <h3>📈 Document Processing (AVERAGE Aggregation)</h3>
+            <div id="document-calculations">
+              <div class="calc-stage">
+                <h4>Step 1: SimHash Projections</h4>
+                <div id="doc-simhash-calcs" class="math-display">Loading...</div>
+              </div>
+              <div class="calc-stage">
+                <h4>Step 2: Partition Assignment</h4>
+                <div id="doc-partition-calcs" class="math-display">Loading...</div>
+              </div>
+              <div class="calc-stage">
+                <h4>Step 3: Vector Aggregation (AVERAGE)</h4>
+                <div id="doc-aggregation-calcs" class="math-display">Loading...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Final Similarity Calculation -->
+        <div class="similarity-calculation">
+          <h3>🎯 Final Similarity Computation</h3>
+          <div id="similarity-calculation" class="math-display">
+            Similarity = Query_FDE · Document_FDE = <span id="final-similarity">0.000</span>
+          </div>
+        </div>
+      </div>
       
       <!-- Side-by-side layout -->
       <div class="side-by-side-container">

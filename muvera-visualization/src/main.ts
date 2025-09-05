@@ -116,6 +116,9 @@ class MuVeRaAnimation {
     // Start background FDE processing in parallel
     this.initializeBackgroundProcessing();
     
+    // Update mathematical calculations
+    this.updateCalculations();
+    
     // Setup both query and document sections initially
     this.setupInitialView('query');
     this.setupDocumentView();
@@ -248,6 +251,188 @@ class MuVeRaAnimation {
     }, 15000);
   }
 
+  private updateCalculations(): void {
+    // Update query calculations
+    this.updateQueryCalculations();
+    
+    // Update document calculations 
+    this.updateDocumentCalculations();
+    
+    // Update final similarity calculation
+    const similarity = this.fdeProcessor.calculateSimilarity(
+      this.queryData.fdeVector, 
+      this.docData.fdeVector
+    );
+    
+    const finalSimilarityElement = document.getElementById('final-similarity');
+    if (finalSimilarityElement) {
+      finalSimilarityElement.textContent = similarity.toFixed(6);
+    }
+  }
+
+  private updateQueryCalculations(): void {
+    const queryData = this.queryData;
+    
+    // Step 1: SimHash Projections
+    const simhashCalcs = document.getElementById('query-simhash-calcs');
+    if (simhashCalcs) {
+      let simhashText = 'Hyperplane Angles (radians):\n';
+      this.queryHyperplanes.forEach((angle, i) => {
+        simhashText += `  H${i+1}: ${angle.toFixed(3)}rad (${(angle * 180 / Math.PI).toFixed(1)}°)\n`;
+      });
+      simhashText += '\nProjections for each word:\n';
+      
+      queryData.words.slice(0, 4).forEach((word: string, i: number) => {
+        const vector = queryData.vectors[i];
+        simhashText += `  "${word}": [${vector.slice(0, 3).map((v: number) => v.toFixed(2)).join(', ')}...]\n`;
+        simhashText += `    → hash = ${Math.abs(vector[0] + vector[1] + vector[2]).toFixed(3)}\n`;
+      });
+      
+      if (queryData.words.length > 4) {
+        simhashText += `  ... and ${queryData.words.length - 4} more words\n`;
+      }
+      
+      simhashCalcs.textContent = simhashText;
+    }
+    
+    // Step 2: Partition Assignment
+    const partitionCalcs = document.getElementById('query-partition-calcs');
+    if (partitionCalcs) {
+      let partitionText = 'Word → Partition Assignment:\n';
+      
+      const partitionCounts = new Array(6).fill(0);
+      queryData.words.slice(0, 4).forEach((word: string, i: number) => {
+        const partition = queryData.partitions[i];
+        partitionCounts[partition - 1]++;
+        partitionText += `  "${word}" → Partition ${partition}\n`;
+      });
+      
+      if (queryData.words.length > 4) {
+        // Count remaining partitions
+        queryData.words.slice(4).forEach((_: any, i: number) => {
+          const partition = queryData.partitions[i + 4];
+          partitionCounts[partition - 1]++;
+        });
+        partitionText += `  ... and ${queryData.words.length - 4} more words\n`;
+      }
+      
+      partitionText += '\nPartition Distribution:\n';
+      partitionCounts.forEach((count, i) => {
+        partitionText += `  P${i+1}: ${count} words\n`;
+      });
+      
+      partitionCalcs.textContent = partitionText;
+    }
+    
+    // Step 3: Vector Aggregation (SUM)
+    const aggregationCalcs = document.getElementById('query-aggregation-calcs');
+    if (aggregationCalcs) {
+      let aggText = 'SUM Aggregation by Partition:\n';
+      
+      const partitionSums = new Array(6).fill(0).map(() => [0, 0, 0]); // Track first 3 dims
+      queryData.words.forEach((word: string, i: number) => {
+        const partition = queryData.partitions[i] - 1;
+        const vector = queryData.vectors[i];
+        partitionSums[partition][0] += vector[0];
+        partitionSums[partition][1] += vector[1]; 
+        partitionSums[partition][2] += vector[2];
+      });
+      
+      partitionSums.forEach((sum, i) => {
+        aggText += `  P${i+1}: [${sum.map(v => v.toFixed(2)).join(', ')}...]\n`;
+      });
+      
+      aggText += '\nQuery FDE (first 12 dimensions):\n';
+      aggText += `  [${queryData.fdeVector.slice(0, 12).map((v: number) => v.toFixed(2)).join(', ')}...]\n`;
+      aggText += `Total FDE dimensions: ${queryData.fdeVector.length}`;
+      
+      aggregationCalcs.textContent = aggText;
+    }
+  }
+
+  private updateDocumentCalculations(): void {
+    const docData = this.docData;
+    
+    // Step 1: SimHash Projections  
+    const simhashCalcs = document.getElementById('doc-simhash-calcs');
+    if (simhashCalcs) {
+      let simhashText = 'Hyperplane Angles (radians):\n';
+      this.documentHyperplanes.forEach((angle, i) => {
+        simhashText += `  H${i+1}: ${angle.toFixed(3)}rad (${(angle * 180 / Math.PI).toFixed(1)}°)\n`;
+      });
+      simhashText += '\nProjections for each word:\n';
+      
+      docData.words.slice(0, 4).forEach((word: string, i: number) => {
+        const vector = docData.vectors[i];
+        simhashText += `  "${word}": [${vector.slice(0, 3).map((v: number) => v.toFixed(2)).join(', ')}...]\n`;
+        simhashText += `    → hash = ${Math.abs(vector[0] + vector[1] + vector[2]).toFixed(3)}\n`;
+      });
+      
+      if (docData.words.length > 4) {
+        simhashText += `  ... and ${docData.words.length - 4} more words\n`;
+      }
+      
+      simhashCalcs.textContent = simhashText;
+    }
+    
+    // Step 2: Partition Assignment
+    const partitionCalcs = document.getElementById('doc-partition-calcs');
+    if (partitionCalcs) {
+      let partitionText = 'Word → Partition Assignment:\n';
+      
+      const partitionCounts = new Array(6).fill(0);
+      docData.words.slice(0, 4).forEach((word: string, i: number) => {
+        const partition = docData.partitions[i];
+        partitionCounts[partition - 1]++;
+        partitionText += `  "${word}" → Partition ${partition}\n`;
+      });
+      
+      if (docData.words.length > 4) {
+        docData.words.slice(4).forEach((_: any, i: number) => {
+          const partition = docData.partitions[i + 4];
+          partitionCounts[partition - 1]++;
+        });
+        partitionText += `  ... and ${docData.words.length - 4} more words\n`;
+      }
+      
+      partitionText += '\nPartition Distribution:\n';
+      partitionCounts.forEach((count, i) => {
+        partitionText += `  P${i+1}: ${count} words\n`;
+      });
+      
+      partitionCalcs.textContent = partitionText;
+    }
+    
+    // Step 3: Vector Aggregation (AVERAGE)
+    const aggregationCalcs = document.getElementById('doc-aggregation-calcs');
+    if (aggregationCalcs) {
+      let aggText = 'AVERAGE Aggregation by Partition:\n';
+      
+      const partitionSums = new Array(6).fill(0).map(() => [0, 0, 0]);
+      const partitionCounts = new Array(6).fill(0);
+      docData.words.forEach((word: string, i: number) => {
+        const partition = docData.partitions[i] - 1;
+        const vector = docData.vectors[i];
+        partitionSums[partition][0] += vector[0];
+        partitionSums[partition][1] += vector[1];
+        partitionSums[partition][2] += vector[2];
+        partitionCounts[partition]++;
+      });
+      
+      partitionSums.forEach((sum, i) => {
+        const count = partitionCounts[i] || 1;
+        const avg = sum.map(v => v / count);
+        aggText += `  P${i+1}: [${avg.map(v => v.toFixed(2)).join(', ')}...] (÷${count})\n`;
+      });
+      
+      aggText += '\nDocument FDE (first 12 dimensions):\n';
+      aggText += `  [${docData.fdeVector.slice(0, 12).map((v: number) => v.toFixed(2)).join(', ')}...]\n`;
+      aggText += `Total FDE dimensions: ${docData.fdeVector.length}`;
+      
+      aggregationCalcs.textContent = aggText;
+    }
+  }
+
   private initializeInputControls(): void {
     // Get input elements
     this.queryInput = document.getElementById('query-input') as HTMLInputElement;
@@ -299,6 +484,9 @@ class MuVeRaAnimation {
       
       // Regenerate hyperplanes for new data
       this.generateRandomHyperplanes();
+      
+      // Update mathematical calculations
+      this.updateCalculations();
       
       // Restart animation with new data
       this.restartAnimationWithNewData();
