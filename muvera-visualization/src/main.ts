@@ -1,5 +1,7 @@
 import * as d3 from 'd3';
 import { TextFDEProcessor } from './text-vectorizer.js';
+import { EmbeddingGemmaVectorizer, createEmbeddingGemmaVectorizer } from './embedding-gemma-vectorizer.js';
+import { MRLOptimizedVectorizer } from './mrl-optimized-vectorizer.js';
 import { BackgroundFDEManager } from './background-fde-manager.js';
 import { DocumentCollectionManager, loadSampleCollection } from './document-collection-manager.js';
 import type { SearchResult, DocumentItem } from './document-collection-manager.js';
@@ -23,6 +25,9 @@ class MuVeRaAnimation {
   private bottomSvgDoc: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
   private queryTextDivDoc: d3.Selection<HTMLDivElement, unknown, HTMLElement, any>;
   private fdeProcessor: TextFDEProcessor;
+  private embeddingGemmaVectorizer: EmbeddingGemmaVectorizer | null = null;
+  private mrlOptimizedVectorizer: MRLOptimizedVectorizer | null = null;
+  private currentEmbeddingMethod: 'hash' | 'gemma' = 'gemma';
   
   // Background FDE processing
   private backgroundFDE: BackgroundFDEManager;
@@ -41,6 +46,8 @@ class MuVeRaAnimation {
   // Input control elements
   private queryInput: HTMLInputElement;
   private documentInput: HTMLInputElement;
+  private embeddingMethodSelect: HTMLSelectElement;
+  private embeddingStatus: HTMLElement;
   
   // Document collection management
   private collectionManager: DocumentCollectionManager | null = null;
@@ -113,6 +120,9 @@ class MuVeRaAnimation {
       this.docData.fdeVector
     ));
     
+    // Try to initialize EmbeddingGemma first, fallback to hash if needed
+    this.initializeEmbeddingMethod();
+    
     // Start background FDE processing in parallel
     this.initializeBackgroundProcessing();
     
@@ -124,6 +134,57 @@ class MuVeRaAnimation {
     this.setupDocumentView();
     this.setupPauseButton();
     this.startAnimation();
+  }
+
+  private async initializeEmbeddingMethod(): Promise<void> {
+    if (this.currentEmbeddingMethod === 'gemma') {
+      try {
+        console.log('🔄 Attempting to initialize MRL-Optimized EmbeddingGemma by default...');
+        
+        if (!this.mrlOptimizedVectorizer) {
+          this.mrlOptimizedVectorizer = new MRLOptimizedVectorizer({
+            performanceMode: 'auto',
+            enableCaching: true,
+            thresholds: {
+              shortText: 50,
+              mediumText: 200,
+              maxLatency: 150
+            }
+          });
+        }
+        
+        await this.mrlOptimizedVectorizer.initialize();
+        
+        // If successful, reprocess with MRL-Optimized EmbeddingGemma
+        this.queryData = await this.mrlOptimizedVectorizer.processQuery(this.queryText);
+        this.docData = await this.mrlOptimizedVectorizer.processDocument(this.docText);
+        
+        // Update UI to show success
+        if (this.embeddingStatus) {
+          this.embeddingStatus.textContent = 'EmbeddingGemma model loaded (semantic embeddings)';
+          this.embeddingStatus.style.color = '#2e7d32';
+        }
+        
+        console.log('✅ EmbeddingGemma initialized successfully as default');
+        
+      } catch (error) {
+        console.warn('⚠️ EmbeddingGemma initialization failed, falling back to hash-based:', error);
+        
+        // Fallback to hash-based
+        this.currentEmbeddingMethod = 'hash';
+        this.queryData = this.fdeProcessor.processQuery(this.queryText);
+        this.docData = this.fdeProcessor.processDocument(this.docText);
+        
+        // Update UI to show fallback
+        if (this.embeddingMethodSelect) {
+          this.embeddingMethodSelect.value = 'hash';
+        }
+        if (this.embeddingStatus) {
+          this.embeddingStatus.textContent = 'EmbeddingGemma unavailable, using hash-based embeddings';
+          this.embeddingStatus.style.color = '#f57c00';
+        }
+      }
+    }
   }
 
   private generateRandomHyperplanes(): void {
@@ -437,10 +498,13 @@ class MuVeRaAnimation {
     // Get input elements
     this.queryInput = document.getElementById('query-input') as HTMLInputElement;
     this.documentInput = document.getElementById('document-input') as HTMLInputElement;
+    this.embeddingMethodSelect = document.getElementById('embedding-method') as HTMLSelectElement;
+    this.embeddingStatus = document.getElementById('embedding-status') as HTMLElement;
     
     // Set initial values
     this.queryInput.value = this.queryText;
     this.documentInput.value = this.docText;
+    this.embeddingMethodSelect.value = this.currentEmbeddingMethod;
     
     // Setup event listeners
     document.getElementById('process-btn')?.addEventListener('click', () => {
@@ -454,6 +518,91 @@ class MuVeRaAnimation {
     document.getElementById('random-btn')?.addEventListener('click', () => {
       this.tryRandomExamples();
     });
+    
+    // Embedding method change listener
+    this.embeddingMethodSelect.addEventListener('change', async () => {
+      await this.switchEmbeddingMethod(this.embeddingMethodSelect.value as 'hash' | 'gemma');
+    });
+  }
+
+  private async switchEmbeddingMethod(method: 'hash' | 'gemma'): Promise<void> {
+    if (this.currentEmbeddingMethod === method) return;
+    
+    console.log(`🔄 Switching to ${method} embedding method...`);
+    this.currentEmbeddingMethod = method;
+    
+    // Update UI status
+    if (method === 'gemma') {
+      this.embeddingStatus.textContent = 'Loading EmbeddingGemma model...';
+      this.embeddingStatus.style.color = '#f57c00';
+      
+      try {
+        // Initialize MRL-Optimized EmbeddingGemma vectorizer
+        if (!this.mrlOptimizedVectorizer) {
+          this.mrlOptimizedVectorizer = new MRLOptimizedVectorizer({
+            performanceMode: 'auto',
+            enableCaching: true,
+            thresholds: {
+              shortText: 50,
+              mediumText: 200,
+              maxLatency: 150
+            }
+          });
+        }
+        
+        await this.mrlOptimizedVectorizer.initialize();
+        
+        this.embeddingStatus.textContent = 'EmbeddingGemma model loaded (semantic embeddings)';
+        this.embeddingStatus.style.color = '#2e7d32';
+        
+        console.log('✅ EmbeddingGemma model loaded successfully');
+        
+      } catch (error) {
+        console.error('❌ Failed to load EmbeddingGemma:', error);
+        this.embeddingStatus.textContent = 'Failed to load EmbeddingGemma. Falling back to hash-based.';
+        this.embeddingStatus.style.color = '#d32f2f';
+        this.currentEmbeddingMethod = 'hash';
+        this.embeddingMethodSelect.value = 'hash';
+        return;
+      }
+    } else {
+      this.embeddingStatus.textContent = 'Hash-based embeddings loaded (instant processing)';
+      this.embeddingStatus.style.color = '#666';
+    }
+    
+    // Reprocess current texts with new embedding method
+    await this.reprocessWithCurrentMethod();
+  }
+
+  private async reprocessWithCurrentMethod(): Promise<void> {
+    console.log(`🔄 Reprocessing texts with ${this.currentEmbeddingMethod} embeddings...`);
+    
+    try {
+      if (this.currentEmbeddingMethod === 'gemma' && this.mrlOptimizedVectorizer) {
+        // Use MRL-Optimized EmbeddingGemma
+        this.queryData = await this.mrlOptimizedVectorizer.processQuery(this.queryText);
+        this.docData = await this.mrlOptimizedVectorizer.processDocument(this.docText);
+      } else {
+        // Use hash-based processor  
+        this.queryData = this.fdeProcessor.processQuery(this.queryText);
+        this.docData = this.fdeProcessor.processDocument(this.docText);
+      }
+      
+      console.log(`✅ Texts reprocessed with ${this.currentEmbeddingMethod} embeddings`);
+      
+      // Regenerate hyperplanes for new data
+      this.generateRandomHyperplanes();
+      
+      // Update calculations
+      this.updateCalculations();
+      
+      // Restart animation
+      this.restartAnimationWithNewData();
+      
+    } catch (error) {
+      console.error(`❌ Failed to reprocess with ${this.currentEmbeddingMethod}:`, error);
+      alert(`Error switching to ${this.currentEmbeddingMethod} embeddings. Please try again.`);
+    }
   }
 
   private async processNewTexts(): Promise<void> {
@@ -478,9 +627,14 @@ class MuVeRaAnimation {
     processBtn.disabled = true;
     
     try {
-      // Reprocess with new texts
-      this.queryData = this.fdeProcessor.processQuery(this.queryText);
-      this.docData = this.fdeProcessor.processDocument(this.docText);
+      // Reprocess with new texts using current embedding method
+      if (this.currentEmbeddingMethod === 'gemma' && this.mrlOptimizedVectorizer) {
+        this.queryData = await this.mrlOptimizedVectorizer.processQuery(this.queryText);
+        this.docData = await this.mrlOptimizedVectorizer.processDocument(this.docText);
+      } else {
+        this.queryData = this.fdeProcessor.processQuery(this.queryText);
+        this.docData = this.fdeProcessor.processDocument(this.docText);
+      }
       
       // Regenerate hyperplanes for new data
       this.generateRandomHyperplanes();
