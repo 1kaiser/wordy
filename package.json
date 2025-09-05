@@ -1,5 +1,26 @@
 {
+  "name": "muvera-browser",
+  "version": "1.0.0",
+  "description": "Production MuVeRa Multi-Vector Retrieval with EmbeddingGemma - Browser Implementation",
+  "type": "module",
+  "main": "main.ts",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build", 
+    "preview": "vite preview",
+    "test": "playwright test"
+  },
+  "keywords": ["muvera", "multi-vector", "retrieval", "embeddinggemma", "semantic-embeddings", "browser-ai", "vector-search"],
+  "author": "1kaiser",
+  "license": "MIT",
   "dependencies": {
-    "playwright": "^1.55.0"
+    "@types/d3": "^7.4.3",
+    "@huggingface/transformers": "^3.7.1",
+    "d3": "^7.9.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.1.2"
   }
 }

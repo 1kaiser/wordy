@@ -1,6 +1,6 @@
-# MuVeRa Exploration - Multi-Vector Retrieval Research
+# MuVeRa Browser - Multi-Vector Retrieval with EmbeddingGemma
 
-Exploring Google Research's **MuVeRa: Making Multi-Vector Retrieval as Fast as Single-Vector Search**.
+Production-ready browser implementation of Google Research's **MuVeRa: Making Multi-Vector Retrieval as Fast as Single-Vector Search** with state-of-the-art EmbeddingGemma semantic embeddings.
 
 **Paper Source**: https://research.google/blog/muvera-making-multi-vector-retrieval-as-fast-as-single-vector-search/
 
@@ -88,9 +88,31 @@ Exploring Google Research's **MuVeRa: Making Multi-Vector Retrieval as Fast as S
 
 ### **🚀 Quick Start**
 ```bash
-cd muvera-visualization && npm run dev
+npm install && npm run dev
 ```
 **→** Opens http://localhost:3000 with live MuVeRa + EmbeddingGemma integration running on any device with a modern browser
+
+## **📁 Repository Structure**
+
+### **🎯 Core Implementation (Root Level)**
+```
+muvera-browser/
+├── 🚀 main.ts                              # Complete MuVeRa + EmbeddingGemma browser implementation
+├── 🧠 production-embedding-gemma.ts        # Production semantic embeddings with semantic-galaxy config  
+├── 🔢 fde-algorithm.ts                     # Fixed Dimensional Encoding algorithm
+├── 📝 text-vectorizer.ts                   # Text processing and FDE transformation
+├── ⚡ embedding-gemma-vectorizer.ts        # Advanced EmbeddingGemma integration
+├── 🎨 index.html                           # Clean, production-ready UI
+├── ⚙️  package.json                        # Modern dependencies and scripts
+└── 📖 README.md                            # This documentation
+```
+
+### **🗂️ Supporting Directories**  
+- `components/` - React hooks and reusable components
+- `docs/` - Research findings and implementation analysis
+- `muvera-visualization/` - Full development environment with advanced features
+- `media/` - Screenshots, videos, animations (gitignored)
+- `dev-scripts/` - Development utilities and testing scripts (gitignored)
 
 ## Implementation Roadmap
 
