@@ -11,6 +11,9 @@ build/
 test-*.html
 simple-*.html
 **/tests/test-*.spec.ts
+test-results/
+playwright-report/
+**/test-production-*.html
 
 # Python development
 muvera-py/
@@ -40,6 +43,9 @@ analyze-*.js
 google-research-page.*
 *.log
 debug-*.json
+download-embeddinggemma-*.js
+quick-*.js
+run-*.js
 
 # Web Worker compiled files
 *worker.js.map
