@@ -7,21 +7,18 @@ dist/
 build/
 *.d.ts
 
-# Development and test files (now archived)
-tests-archive/
+# Test files and results
 test-results/
 playwright-report/
-**/test-production-*.html
+test-*.html
+*.spec.ts
+*.spec.js
 
-# Development scripts (now in dev-scripts/)
+# Development subdirectory (contains separate project)
+muvera-visualization/
+
+# Development scripts
 dev-scripts/
-analyze-*.js
-download-*.js
-quick-*.js
-run-*.js
-extract-frames.js
-record-videos.js
-screenshot-test.js
 
 # Python development
 muvera-py/
@@ -35,21 +32,20 @@ venv/
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Media files (now in media/)
+# Media files (keep README images)
 media/
 *.mp4
 *.avi
 *.mov
-*.png
-*.jpg
-*.jpeg
 *.gif
 *.webm
+# Keep the main visualization image
+!muvera-original-fixed.png
 
-# Documentation and research (now in docs/)
-# Keep docs/ visible but ignore temp files
-docs/*.tmp
-research/*.tmp
+# Temporary and debug files
+*.tmp
+*.log
+debug-*.json
 
 # Logs and debug files
 *.log

@@ -341,28 +341,47 @@ class MuVeRaAnimation {
     this.processedDocumentsCount = 0;
     
     try {
+      // Track timing statistics
+      const timings: number[] = [];
+      const startBatch = performance.now();
+      
       // Process documents one by one with progress updates
       for (let i = 0; i < this.documents.length; i++) {
         const doc = this.documents[i];
         
         d3.select('#embedding-details').text(`Processing document ${i + 1}/${this.documents.length}: "${doc.substring(0, 50)}..."`);
         
+        // Time each embedding generation
+        const startTime = performance.now();
+        
         // Generate embedding with document prefix
         const embedding = await this.productionEmbeddingGemma.generateEmbedding(`search_document: ${doc}`);
+        
+        const endTime = performance.now();
+        const embeddingTime = endTime - startTime;
+        timings.push(embeddingTime);
+        
         this.documentEmbeddings.push(embedding);
         this.processedDocumentsCount++;
         
-        // Update progress
+        // Calculate average time
+        const avgTime = timings.reduce((a, b) => a + b, 0) / timings.length;
+        
+        // Update progress with timing info
         const percentage = Math.round(((i + 1) / this.documents.length) * 100);
         d3.select('#embedding-progress-bar').style('width', `${percentage}%`);
-        d3.select('#embedding-progress-text').text(`${i + 1}/${this.documents.length} documents`);
+        d3.select('#embedding-progress-text').text(`${i + 1}/${this.documents.length} documents (${embeddingTime.toFixed(0)}ms, avg: ${avgTime.toFixed(0)}ms)`);
         
         // Small delay to show progress
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       
-      // Complete
-      d3.select('#embedding-details').text(`✅ Successfully processed ${this.documents.length} documents with 768D embeddings`);
+      // Calculate final statistics
+      const totalTime = performance.now() - startBatch;
+      const avgTime = timings.reduce((a, b) => a + b, 0) / timings.length;
+      
+      // Complete with timing statistics
+      d3.select('#embedding-details').text(`✅ Processed ${this.documents.length} documents | Total: ${(totalTime/1000).toFixed(1)}s | Avg: ${avgTime.toFixed(0)}ms per embedding`);
       d3.select('#processed-status')
         .style('display', 'block')
         .text(`📊 Ready: ${this.documents.length} documents processed with 768D embeddings`);
@@ -422,8 +441,16 @@ class MuVeRaAnimation {
     this.searchDocumentsBtn.disabled = true;
     
     try {
+      // Time the query embedding generation
+      const queryStartTime = performance.now();
+      
       // Generate query embedding
       const queryEmbedding = await this.productionEmbeddingGemma.generateEmbedding(`search_query: ${query}`);
+      
+      const queryEndTime = performance.now();
+      const queryTime = queryEndTime - queryStartTime;
+      
+      console.log(`⏱️ Query embedding generated in ${queryTime.toFixed(0)}ms`);
       
       // Calculate similarities
       const similarities: { index: number, score: number, document: string }[] = [];
@@ -443,8 +470,8 @@ class MuVeRaAnimation {
       // Take top K results
       const topResults = similarities.slice(0, topK);
       
-      // Display results
-      this.displaySearchResults(query, topResults);
+      // Display results with timing
+      this.displaySearchResults(query, topResults, queryTime);
       
       // Update visualization with top result
       if (topResults.length > 0) {
@@ -460,21 +487,21 @@ class MuVeRaAnimation {
     }
   }
 
-  private displaySearchResults(query: string, results: { index: number, score: number, document: string }[]): void {
+  private displaySearchResults(query: string, results: { index: number, score: number, document: string }[], queryTime?: number): void {
     const resultsContainer = d3.select('#search-results');
     const resultsSection = d3.select('#search-results-container');
     
     resultsSection.style('display', 'block');
     resultsContainer.selectAll('*').remove();
     
-    // Add query info
-    resultsContainer.append('div')
+    // Add query info with timing if available
+    const queryInfo = resultsContainer.append('div')
       .style('margin-bottom', '15px')
       .style('padding', '10px')
       .style('background', '#e3f2fd')
       .style('border-radius', '4px')
       .style('border', '1px solid #2196f3')
-      .html(`<strong>Query:</strong> "${query}" | <strong>Results:</strong> ${results.length} documents`);
+      .html(`<strong>Query:</strong> "${query}" | <strong>Results:</strong> ${results.length} documents${queryTime ? ` | <strong>⏱️ Embedding Time:</strong> ${queryTime.toFixed(0)}ms` : ''}`);
     
     // Add results
     results.forEach((result, index) => {
