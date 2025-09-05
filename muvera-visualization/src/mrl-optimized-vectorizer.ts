@@ -2,6 +2,7 @@
 // Implements dynamic embedding dimensions with performance monitoring
 
 import { EmbeddingGemmaVectorizer, createEmbeddingGemmaVectorizer } from './embedding-gemma-vectorizer.js';
+import { getEmbeddingGemmaWorkerManager, EmbeddingGemmaWorkerManager } from './embedding-gemma-worker-manager.js';
 
 export type UseCase = 'speed' | 'balanced' | 'quality';
 export type PerformanceMode = 'auto' | 'manual';
@@ -25,7 +26,7 @@ export const DEFAULT_MRL_CONFIG: MRLConfig = {
   dimensions: {
     speed: 128,
     balanced: 256,
-    quality: 768
+    quality: 384  // Updated to match MiniLM-L6-v2 model (384D)
   },
   thresholds: {
     shortText: 100,
@@ -106,31 +107,51 @@ class PerformanceMonitor {
 
 export class MRLOptimizedVectorizer {
   private baseVectorizer: EmbeddingGemmaVectorizer | null = null;
+  private workerManager: EmbeddingGemmaWorkerManager | null = null;
   private config: MRLConfig;
   private embeddingCache = new Map<string, {[dim: number]: number[]}>();
   private performanceMonitor = new PerformanceMonitor();
   private isInitialized = false;
+  private useWebWorker: boolean;
 
-  constructor(config: Partial<MRLConfig> = {}) {
+  constructor(config: Partial<MRLConfig> & { useWebWorker?: boolean } = {}) {
     this.config = { ...DEFAULT_MRL_CONFIG, ...config };
+    this.useWebWorker = config.useWebWorker ?? true; // Default to Web Worker for better performance
   }
 
-  async initialize(): Promise<void> {
+  async initialize(onProgress?: (message: string, progress?: number) => void): Promise<void> {
     if (this.isInitialized) return;
 
     console.log('🔄 Initializing MRL-Optimized Vectorizer...');
     
     try {
-      this.baseVectorizer = createEmbeddingGemmaVectorizer({
-        embeddingDimension: this.config.dimensions.quality, // Always use max dimension for base
-        maxTokens: 512,
-        quantized: true
-      });
+      if (this.useWebWorker) {
+        console.log('🔧 Using Web Worker for EmbeddingGemma operations');
+        this.workerManager = getEmbeddingGemmaWorkerManager();
+        
+        await this.workerManager.initialize(
+          {
+            embeddingDimension: this.config.dimensions.quality, // Will be 384 for MiniLM-L6-v2
+            maxTokens: 512,
+            quantized: true
+          },
+          onProgress
+        );
+        
+        console.log('✅ MRL-Optimized Vectorizer initialized with Web Worker');
+      } else {
+        console.log('🔧 Using main thread for EmbeddingGemma operations');
+        this.baseVectorizer = createEmbeddingGemmaVectorizer({
+          embeddingDimension: this.config.dimensions.quality, // Always use max dimension for base
+          maxTokens: 512,
+          quantized: true
+        });
+        
+        await this.baseVectorizer.initialize();
+        console.log('✅ MRL-Optimized Vectorizer initialized on main thread');
+      }
       
-      await this.baseVectorizer.initialize();
       this.isInitialized = true;
-      
-      console.log('✅ MRL-Optimized Vectorizer initialized');
       console.log(`📊 Dimensions: ${this.config.dimensions.speed}D (speed) → ${this.config.dimensions.balanced}D (balanced) → ${this.config.dimensions.quality}D (quality)`);
       
     } catch (error) {
@@ -149,8 +170,8 @@ export class MRLOptimizedVectorizer {
       await this.initialize();
     }
 
-    if (!this.baseVectorizer) {
-      throw new Error('Base vectorizer not initialized');
+    if (!this.baseVectorizer && !this.workerManager) {
+      throw new Error('Neither base vectorizer nor worker manager initialized');
     }
 
     const startTime = performance.now();
@@ -178,8 +199,19 @@ export class MRLOptimizedVectorizer {
     }
 
     try {
-      // Generate full-dimension embedding
-      const fullEmbedding = await this.baseVectorizer.generateEmbedding(text, taskPrompt);
+      // Generate full-dimension embedding using appropriate method
+      let fullEmbedding: number[];
+      
+      if (this.workerManager) {
+        // Use Web Worker for embedding generation
+        const result = await this.workerManager.generateEmbedding(text, taskPrompt);
+        fullEmbedding = result.embedding;
+      } else if (this.baseVectorizer) {
+        // Use main thread vectorizer
+        fullEmbedding = await this.baseVectorizer.generateEmbedding(text, taskPrompt);
+      } else {
+        throw new Error('No embedding method available');
+      }
       
       // Apply Matryoshka truncation
       const truncatedEmbedding = fullEmbedding.slice(0, targetDimensions);

@@ -1,7 +1,7 @@
 // EmbeddingGemma-based text vectorization using Transformers.js
 // Replaces hash-based embeddings with state-of-the-art semantic understanding
 
-import { pipeline, Pipeline } from '@xenova/transformers';
+import { AutoModel, AutoTokenizer } from '@xenova/transformers';
 import { generateQueryFDE, generateDocumentFDE, DEFAULT_FDE_CONFIG } from './fde-algorithm.js';
 
 interface EmbeddingGemmaConfig {
@@ -13,20 +13,22 @@ interface EmbeddingGemmaConfig {
 }
 
 const DEFAULT_EMBEDDINGGEMMA_CONFIG: EmbeddingGemmaConfig = {
-  model: 'Xenova/bge-small-en-v1.5', // Using BGE as EmbeddingGemma ONNX not yet available
-  embeddingDimension: 384, // BGE small dimension
+  model: 'onnx-community/embeddinggemma-300m-ONNX', // Real EmbeddingGemma model
+  embeddingDimension: 768, // Full EmbeddingGemma dimension (supports MRL truncation)
   maxTokens: 512,
   quantized: true,
   device: 'cpu'
 };
 
-// Cache for loaded pipeline
-let cachedPipeline: Pipeline | null = null;
+// Cache for loaded model and tokenizer
+let cachedModel: any = null;
+let cachedTokenizer: any = null;
 let isLoading = false;
 
 export class EmbeddingGemmaVectorizer {
   private config: EmbeddingGemmaConfig;
-  private pipeline: Pipeline | null = null;
+  private model: any = null;
+  private tokenizer: any = null;
   private fdeConfig: any;
 
   constructor(config: Partial<EmbeddingGemmaConfig> = {}) {
@@ -39,17 +41,19 @@ export class EmbeddingGemmaVectorizer {
 
   // Initialize the embedding model
   async initialize(): Promise<void> {
-    if (cachedPipeline) {
-      this.pipeline = cachedPipeline;
+    if (cachedModel && cachedTokenizer) {
+      this.model = cachedModel;
+      this.tokenizer = cachedTokenizer;
       return;
     }
 
     if (isLoading) {
       // Wait for existing loading to complete
-      while (isLoading && !cachedPipeline) {
+      while (isLoading && (!cachedModel || !cachedTokenizer)) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      this.pipeline = cachedPipeline;
+      this.model = cachedModel;
+      this.tokenizer = cachedTokenizer;
       return;
     }
 
@@ -58,18 +62,20 @@ export class EmbeddingGemmaVectorizer {
     const startTime = performance.now();
 
     try {
-      // Load pipeline with feature extraction task
-      this.pipeline = await pipeline(
-        'feature-extraction',
-        this.config.model,
-        {
-          quantized: this.config.quantized,
-          device: this.config.device,
-          revision: 'main'
-        }
-      );
+      // Load AutoTokenizer and AutoModel for EmbeddingGemma
+      console.log(`📦 Loading tokenizer: ${this.config.model}`);
+      this.tokenizer = await AutoTokenizer.from_pretrained(this.config.model);
+      
+      console.log(`🧠 Loading model: ${this.config.model}`);
+      this.model = await AutoModel.from_pretrained(this.config.model, {
+        dtype: this.config.quantized ? 'q8' : 'fp32', // EmbeddingGemma supports fp32, q8, q4
+        device: this.config.device
+      });
 
-      cachedPipeline = this.pipeline;
+      // Cache the loaded model and tokenizer
+      cachedModel = this.model;
+      cachedTokenizer = this.tokenizer;
+      
       const loadTime = performance.now() - startTime;
       console.log(`✅ EmbeddingGemma model loaded in ${loadTime.toFixed(2)}ms`);
       console.log(`📊 Model: ${this.config.model}`);
@@ -86,55 +92,54 @@ export class EmbeddingGemmaVectorizer {
 
   // Generate embedding for a single text
   async generateEmbedding(text: string, taskPrompt?: string): Promise<number[]> {
-    if (!this.pipeline) {
+    if (!this.model || !this.tokenizer) {
       await this.initialize();
     }
 
-    if (!this.pipeline) {
-      throw new Error('EmbeddingGemma pipeline not initialized');
+    if (!this.model || !this.tokenizer) {
+      throw new Error('EmbeddingGemma model not initialized');
     }
 
     try {
       // Prepare text with task prompt if provided
       const inputText = taskPrompt ? `${taskPrompt}: ${text}` : text;
       
-      // Truncate if too long
-      const truncatedText = inputText.length > this.config.maxTokens * 4 
-        ? inputText.substring(0, this.config.maxTokens * 4)
-        : inputText;
-
-      // Generate embedding
-      const result = await this.pipeline(truncatedText, { 
-        pooling: 'mean',
-        normalize: true 
+      // Tokenize the input text
+      const inputs = await this.tokenizer(inputText, {
+        return_tensors: 'pt',
+        truncation: true,
+        max_length: this.config.maxTokens,
+        padding: true
       });
 
-      // Extract embedding array
-      let embedding: number[];
-      if (Array.isArray(result) && result[0]?.data) {
-        embedding = Array.from(result[0].data);
-      } else if (result?.data) {
-        embedding = Array.from(result.data);
-      } else if (Array.isArray(result)) {
-        embedding = result;
-      } else {
-        throw new Error('Unexpected embedding format');
-      }
+      // Generate embedding using the model
+      const outputs = await this.model(inputs);
+      
+      // Extract the embedding (typically from last_hidden_state with mean pooling)
+      const embeddings = outputs.last_hidden_state;
+      
+      // Apply mean pooling to get sentence embedding
+      const sentenceEmbedding = embeddings.mean(1); // Mean over sequence length
+      
+      // Convert to regular array
+      const embedding = Array.from(sentenceEmbedding.data);
+      
+      // Normalize the embedding (L2 normalization)
+      const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
+      const normalizedEmbedding = magnitude > 0 
+        ? embedding.map(val => val / magnitude)
+        : embedding;
 
       // Validate dimension
-      if (embedding.length !== this.config.embeddingDimension) {
-        console.warn(`Expected ${this.config.embeddingDimension}D, got ${embedding.length}D embedding`);
-        // Truncate or pad if needed
-        if (embedding.length > this.config.embeddingDimension) {
-          embedding = embedding.slice(0, this.config.embeddingDimension);
-        } else {
-          while (embedding.length < this.config.embeddingDimension) {
-            embedding.push(0);
-          }
+      if (normalizedEmbedding.length !== this.config.embeddingDimension) {
+        console.warn(`Expected ${this.config.embeddingDimension}D, got ${normalizedEmbedding.length}D embedding`);
+        // For EmbeddingGemma, we expect 768D - this supports MRL truncation
+        if (normalizedEmbedding.length > this.config.embeddingDimension) {
+          return normalizedEmbedding.slice(0, this.config.embeddingDimension);
         }
       }
 
-      return embedding;
+      return normalizedEmbedding;
 
     } catch (error) {
       console.error('❌ Embedding generation failed:', error);
@@ -253,13 +258,14 @@ export class EmbeddingGemmaVectorizer {
       maxTokens: this.config.maxTokens,
       quantized: this.config.quantized,
       device: this.config.device,
-      isInitialized: this.pipeline !== null
+      isInitialized: this.model !== null && this.tokenizer !== null
     };
   }
 
   // Clear cache (useful for testing)
   static clearCache(): void {
-    cachedPipeline = null;
+    cachedModel = null;
+    cachedTokenizer = null;
     isLoading = false;
   }
 }
