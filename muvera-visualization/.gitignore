@@ -83,39 +83,36 @@ pkg/
 target/
 Cargo.lock
 
-# Playwright test outputs
+# ORGANIZED STRUCTURE - Development files now archived
+# Tests archived
+tests-archive/
 test-results/
 playwright-report/
+
+# Development scripts organized
+dev-scripts/
+
+# Media files organized  
+media/
+
+# Keep docs/ and src/ visible for core functionality
+
+# Individual patterns for any remaining files
+test-*.html
+test-*.js
+simple-*.html
+analyze-*.js
+download-*.js
+quick-*.js
+run-*.js
+extract-*.js
+record-*.js
+screenshot-*.js
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.webm
 *.mp4
-
-# Animation frames and screenshots
-animation-frames/
-implementation-frames/
-*-test.png
-*-screenshot.png
-
-# Video recordings
-*.mp4
-*.webm
 *.mov
 *.avi
-
-# Test and development files
-test-*.js
-*-test.js
-record-*.js
-extract-*.js
-screenshot-*.js
-analyze-*.js
-
-# Temporary HTML files
-query.html
-document.html
-
-# External dependencies downloaded
-muvera-py/

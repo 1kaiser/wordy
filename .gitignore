@@ -2,18 +2,26 @@
 node_modules/
 package-lock.json
 
-# Build outputs
+# Build outputs  
 dist/
 build/
 *.d.ts
 
-# Development and test files
-test-*.html
-simple-*.html
-**/tests/test-*.spec.ts
+# Development and test files (now archived)
+tests-archive/
 test-results/
 playwright-report/
 **/test-production-*.html
+
+# Development scripts (now in dev-scripts/)
+dev-scripts/
+analyze-*.js
+download-*.js
+quick-*.js
+run-*.js
+extract-frames.js
+record-videos.js
+screenshot-test.js
 
 # Python development
 muvera-py/
@@ -27,7 +35,8 @@ venv/
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Media files and animations
+# Media files (now in media/)
+media/
 *.mp4
 *.avi
 *.mov
@@ -35,17 +44,16 @@ pip-delete-this-directory.txt
 *.jpg
 *.jpeg
 *.gif
-animation-frames/
 *.webm
 
-# Analysis and debug files
-analyze-*.js
-google-research-page.*
+# Documentation and research (now in docs/)
+# Keep docs/ visible but ignore temp files
+docs/*.tmp
+research/*.tmp
+
+# Logs and debug files
 *.log
 debug-*.json
-download-embeddinggemma-*.js
-quick-*.js
-run-*.js
 
 # Web Worker compiled files
 *worker.js.map
