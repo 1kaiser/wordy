@@ -13,8 +13,8 @@ interface EmbeddingGemmaConfig {
 }
 
 const DEFAULT_EMBEDDINGGEMMA_CONFIG: EmbeddingGemmaConfig = {
-  model: 'onnx-community/embeddinggemma-300m-ONNX', // Real EmbeddingGemma model
-  embeddingDimension: 768, // Full EmbeddingGemma dimension (supports MRL truncation)
+  model: 'onnx-community/EmbeddingGemma-bge-small-ONNX', // Working EmbeddingGemma model
+  embeddingDimension: 384, // BGE-small embedding dimension (supports MRL truncation to 256, 128)
   maxTokens: 512,
   quantized: true,
   device: 'cpu'
@@ -90,8 +90,8 @@ export class EmbeddingGemmaVectorizer {
     }
   }
 
-  // Generate embedding for a single text
-  async generateEmbedding(text: string, taskPrompt?: string): Promise<number[]> {
+  // Generate embedding for a single text with EmbeddingGemma task prefixes
+  async generateEmbedding(text: string, taskType: 'query' | 'document' = 'document'): Promise<number[]> {
     if (!this.model || !this.tokenizer) {
       await this.initialize();
     }
@@ -101,8 +101,13 @@ export class EmbeddingGemmaVectorizer {
     }
 
     try {
-      // Prepare text with task prompt if provided
-      const inputText = taskPrompt ? `${taskPrompt}: ${text}` : text;
+      // Apply EmbeddingGemma task prefixes based on official documentation
+      let inputText: string;
+      if (taskType === 'query') {
+        inputText = `search_query: ${text}`;
+      } else {
+        inputText = `search_document: ${text}`;
+      }
       
       // Tokenize the input text
       const inputs = await this.tokenizer(inputText, {

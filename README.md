@@ -129,38 +129,56 @@ Exploring Google Research's **MuVeRa: Making Multi-Vector Retrieval as Fast as S
 
 ## Technical Implementation Details
 
-### **Text Processing Pipeline**
+### **Text Processing Pipeline with EmbeddingGemma**
 ```javascript
-// Complete txt file → MuVeRa pipeline
+// Complete txt file → MuVeRa pipeline with EmbeddingGemma
 async function processTextFile(txtFile: File): Promise<MultiVectorDocument> {
   const text = await txtFile.text();
   
-  // Strategy 1: Sentence-based multi-vectors
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  // Strategy 1: EmbeddingGemma with task prefixes
+  const embeddingGemma = new EmbeddingGemmaVectorizer({
+    model: 'onnx-community/EmbeddingGemma-bge-small-ONNX',
+    embeddingDimension: 384, // Supports MRL truncation to 256D, 128D
+    taskPrefixes: {
+      query: 'search_query: ',
+      document: 'search_document: '
+    }
+  });
   
-  // Strategy 2: Semantic chunking with similarity thresholds  
-  const semanticChunks = await semanticBoundaryDetection(sentences);
-  
-  // Strategy 3: Multi-granularity representation
+  // Strategy 2: Multi-granularity representation with semantic prefixes
   const vectors = await generateMultiGranularityEmbeddings(text, {
-    levels: ['document', 'paragraph', 'sentence', 'phrase']
+    levels: ['document', 'paragraph', 'sentence', 'phrase'],
+    taskType: 'document' // Uses search_document: prefix
+  });
+  
+  // Strategy 3: Matryoshka Representation Learning for efficiency
+  const mrlVectors = await applyMatryoshkaTruncation(vectors, {
+    dimensions: [384, 256, 128], // Speed vs quality trade-off
+    useCase: 'balanced' // 256D for optimal performance
   });
   
   return {
     id: txtFile.name,
-    vectors: vectors,
-    metadata: { strategy: 'multi-granularity', chunks: vectors.length }
+    vectors: mrlVectors,
+    metadata: { 
+      strategy: 'embeddinggemma-mrl',
+      dimensions: mrlVectors[0].length,
+      chunks: mrlVectors.length,
+      taskType: 'document'
+    }
   };
 }
 ```
 
-### **Browser Compatibility Matrix**
-| Component | JavaScript | Rust/WASM | Performance | Memory |
-|-----------|------------|------------|-------------|---------|
-| FDE Transform | ✅ ml-matrix | ✅ nalgebra | WASM 2-10x | Similar |
-| Embeddings | ✅ transformers.js | ✅ candle-core | Similar | WASM better |
-| Visualizations | ✅ D3.js + SVG | ✅ D3 + WASM | JS better | Similar |
-| MIPS Search | ✅ Pure JS | ✅ WASM SIMD | WASM 3-5x | WASM better |
+### **Browser Compatibility Matrix with EmbeddingGemma**
+| Component | JavaScript | Rust/WASM | Performance | Memory | EmbeddingGemma |
+|-----------|------------|------------|-------------|---------|-----------------|
+| FDE Transform | ✅ ml-matrix | ✅ nalgebra | WASM 2-10x | Similar | ✅ Compatible |
+| EmbeddingGemma | ✅ transformers.js | ✅ candle-core | Similar | <200MB RAM | ✅ Native Support |
+| Task Prefixes | ✅ String concat | ✅ String processing | Similar | Minimal | ✅ Built-in |
+| MRL Truncation | ✅ Array.slice() | ✅ Vector ops | WASM 2x | WASM better | ✅ Optimized |
+| Visualizations | ✅ D3.js + SVG | ✅ D3 + WASM | JS better | Similar | ✅ Compatible |
+| MIPS Search | ✅ Pure JS | ✅ WASM SIMD | WASM 3-5x | WASM better | ✅ Accelerated |
 
 ### **Integration Architecture**
 ```typescript
@@ -193,6 +211,14 @@ interface MuVeRaIntegration {
 - **Language**: C++ with Bazel build system
 - **Core Files**: `fixed_dimensional_encoding.h/.cc`, configuration via protobuf
 - **Production Ready**: Part of Google's graph-mining library
+
+### **EmbeddingGemma Integration**
+- **HuggingFace Blog**: https://huggingface.co/blog/embeddinggemma#sentence-transformers
+- **Model Architecture**: 768D embeddings with Matryoshka Representation Learning (truncate to 512D, 256D, 128D)
+- **Task Prefixes**: `search_query:` and `search_document:` for optimized retrieval
+- **Browser Implementation**: Transformers.js support with quantization (fp32, q8, q4)
+- **Performance**: <200MB RAM usage, bi-directional attention, 308M parameters
+- **Multilingual**: 100+ languages, 2048 token context window
 
 ### **Browser Feasibility Assessment**
 - **Algorithm Portability**: 95% compatible with web technologies
