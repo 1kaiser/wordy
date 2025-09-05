@@ -82,3 +82,40 @@ pkg/
 # Rust build files
 target/
 Cargo.lock
+
+# Playwright test outputs
+test-results/
+playwright-report/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webm
+*.mp4
+
+# Animation frames and screenshots
+animation-frames/
+implementation-frames/
+*-test.png
+*-screenshot.png
+
+# Video recordings
+*.mp4
+*.webm
+*.mov
+*.avi
+
+# Test and development files
+test-*.js
+*-test.js
+record-*.js
+extract-*.js
+screenshot-*.js
+analyze-*.js
+
+# Temporary HTML files
+query.html
+document.html
+
+# External dependencies downloaded
+muvera-py/
