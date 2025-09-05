@@ -86,6 +86,12 @@ Exploring Google Research's **MuVeRa: Making Multi-Vector Retrieval as Fast as S
 - **Memory Usage**: <200MB RAM with optimized caching
 - **Integration Ready**: useModel hook + ProductionEmbeddingGemma class
 
+### **🚀 Quick Start**
+```bash
+cd muvera-visualization && npm run dev
+```
+**→** Opens http://localhost:3000 with live MuVeRa + EmbeddingGemma integration running on any device with a modern browser
+
 ## Implementation Roadmap
 
 ### **✅ Phase 1: Core Algorithm Development - COMPLETE**
