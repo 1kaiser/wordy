@@ -1,7 +1,7 @@
-// EmbeddingGemma-based text vectorization using Transformers.js
-// Replaces hash-based embeddings with state-of-the-art semantic understanding
+// Production-ready EmbeddingGemma implementation based on semantic-galaxy
+// Includes WebGPU/WASM detection, singleton caching, and adaptive batching
 
-import { AutoModel, AutoTokenizer } from '@xenova/transformers';
+import { env, AutoModel, AutoTokenizer, type PreTrainedModel, type PreTrainedTokenizer, type ProgressInfo } from '@xenova/transformers';
 import { generateQueryFDE, generateDocumentFDE, DEFAULT_FDE_CONFIG } from './fde-algorithm.js';
 
 interface EmbeddingGemmaConfig {
@@ -9,21 +9,43 @@ interface EmbeddingGemmaConfig {
   embeddingDimension: number;
   maxTokens: number;
   quantized: boolean;
-  device: 'cpu' | 'gpu';
+  device: 'webgpu' | 'wasm' | 'auto';
+  batchSize?: number;
+}
+
+interface ModelInstance {
+  model: PreTrainedModel;
+  tokenizer: PreTrainedTokenizer;
+  device: 'webgpu' | 'wasm';
 }
 
 const DEFAULT_EMBEDDINGGEMMA_CONFIG: EmbeddingGemmaConfig = {
-  model: 'onnx-community/EmbeddingGemma-bge-small-ONNX', // Working EmbeddingGemma model
-  embeddingDimension: 384, // BGE-small embedding dimension (supports MRL truncation to 256, 128)
-  maxTokens: 512,
+  model: 'onnx-community/embeddinggemma-300m-ONNX', // Production EmbeddingGemma model
+  embeddingDimension: 768, // Full EmbeddingGemma dimension (supports MRL truncation)
+  maxTokens: 256, // Optimized for performance
   quantized: true,
-  device: 'cpu'
+  device: 'auto' // Auto-detect WebGPU/WASM
 };
 
-// Cache for loaded model and tokenizer
-let cachedModel: any = null;
-let cachedTokenizer: any = null;
-let isLoading = false;
+// Singleton cache for the model instance and loading promise
+const modelCache: {
+  instance: ModelInstance | null;
+  loadingPromise: Promise<ModelInstance> | null;
+} = {
+  instance: null,
+  loadingPromise: null,
+};
+
+// WebGPU availability check
+async function checkWebGPUAvailability(): Promise<boolean> {
+  try {
+    if (!navigator.gpu) return false;
+    return !!(await navigator.gpu.requestAdapter());
+  } catch (error) {
+    console.error('Error checking WebGPU availability:', error);
+    return false;
+  }
+}
 
 export class EmbeddingGemmaVectorizer {
   private config: EmbeddingGemmaConfig;
