@@ -6,20 +6,31 @@
   "main": "main.ts",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build", 
+    "build": "tsc && vite build",
+    "build:prod": "vite build",
     "preview": "vite preview",
-    "test": "playwright test"
+    "test": "playwright test",
+    "deploy": "vite build && gh-pages -d dist"
   },
-  "keywords": ["muvera", "multi-vector", "retrieval", "embeddinggemma", "semantic-embeddings", "browser-ai", "vector-search"],
+  "keywords": [
+    "muvera",
+    "multi-vector",
+    "retrieval",
+    "embeddinggemma",
+    "semantic-embeddings",
+    "browser-ai",
+    "vector-search"
+  ],
   "author": "1kaiser",
   "license": "MIT",
   "dependencies": {
-    "@types/d3": "^7.4.3",
     "@huggingface/transformers": "^3.7.1",
+    "@types/d3": "^7.4.3",
     "d3": "^7.9.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
+    "gh-pages": "^6.3.0",
     "typescript": "~5.8.3",
     "vite": "^7.1.2"
   }
