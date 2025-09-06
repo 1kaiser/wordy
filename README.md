@@ -4,6 +4,35 @@ Production-ready browser implementation of Google Research's **MuVeRa: Making Mu
 
 **Paper Source**: https://research.google/blog/muvera-making-multi-vector-retrieval-as-fast-as-single-vector-search/
 
+## 🎯 Interactive Visualization
+
+![MuVeRa Browser Visualization](muvera-original-fixed.png)
+
+The application features side-by-side query vs document FDE construction with:
+- **Real-time Animation**: Watch tokens being processed through semantic space partitioning
+- **EmbeddingGemma Integration**: 768-dimensional semantic embeddings with timing metrics
+- **Interactive Controls**: Process custom texts, upload documents, and search with semantic similarity
+- **Mathematical Transparency**: Collapsible section showing step-by-step FDE calculations
+- **Performance Metrics**: Live timing for model loading, embedding generation, and search operations
+
+## 🚀 Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/1kaiser/muvera-browser.git
+cd muvera-browser
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+
+# Open http://localhost:3004 in your browser
+```
+
+**Requirements**: Modern browser with WebGPU/WASM support (Chrome/Edge recommended)
+
 ## Key Concepts
 
 ### Multi-Vector Models
