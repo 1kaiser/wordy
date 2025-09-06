@@ -16,15 +16,21 @@
 
 ## Technical Architecture
 
-### Core Components
+### Core Components (Organized Structure - Sep 6, 2025)
 ```
 muvera-browser/
-├── main.ts                          # Main application logic with MuVeRa animation
-├── fde-algorithm.ts                 # Fixed Dimensional Encoding implementation
-├── production-embedding-gemma.ts    # EmbeddingGemma integration with WebGPU/WASM
-├── embedding-gemma-vectorizer.ts    # Document/query embedding generation
-├── text-vectorizer.ts               # Text processing utilities
-└── index.html                       # UI with collapsible sections
+├── src/                             # All TypeScript source files
+│   ├── main.ts                      # Main application logic
+│   ├── fde-algorithm.ts             # FDE implementation
+│   ├── production-embedding-gemma.ts # EmbeddingGemma integration
+│   ├── embedding-gemma-vectorizer.ts # Vectorization
+│   └── text-vectorizer.ts           # Text processing
+├── public/
+│   └── assets/                      # Screenshots and images
+├── components/                      # Reusable components
+├── docs/                           # Documentation
+├── index.html                      # Main UI
+└── [config files]                  # package.json, tsconfig, vite
 ```
 
 ### Key Features

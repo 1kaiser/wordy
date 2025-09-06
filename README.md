@@ -6,7 +6,7 @@ Production-ready browser implementation of Google Research's **MuVeRa: Making Mu
 
 ## 🎯 Interactive Visualization
 
-![MuVeRa Browser Application](muvera-application-screenshot.png)
+![MuVeRa Browser Application](public/assets/muvera-application-screenshot.png)
 
 The application features side-by-side query vs document FDE construction with:
 - **Real-time Animation**: Watch tokens being processed through semantic space partitioning
@@ -38,6 +38,30 @@ npm run dev
 - **Dependencies**: 148 packages install cleanly in ~60 seconds
 - **Auto-port selection**: Automatically finds available port if 3004 is in use
 - **All components functional**: D3.js visualizations, EmbeddingGemma integration, and interactive controls working
+
+## 📁 Project Structure
+
+```
+muvera-browser/
+├── src/                        # Source code
+│   ├── main.ts                 # Main application entry
+│   ├── fde-algorithm.ts        # MuVeRa FDE implementation
+│   ├── production-embedding-gemma.ts  # EmbeddingGemma integration
+│   ├── embedding-gemma-vectorizer.ts  # Document/query vectorization
+│   └── text-vectorizer.ts      # Text processing utilities
+├── public/                     
+│   └── assets/                 # Images and screenshots
+├── components/                 # Reusable components
+│   └── useModel.ts            
+├── docs/                       # Documentation
+│   └── RESEARCH_FINDINGS.md
+├── index.html                  # Main HTML file
+├── package.json                # Dependencies
+├── tsconfig.json              # TypeScript config
+├── vite.config.ts             # Build configuration
+├── README.md                  # This file
+└── CLAUDE.md                  # Development documentation
+```
 
 ## Key Concepts
 
