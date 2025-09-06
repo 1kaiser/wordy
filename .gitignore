@@ -1,0 +1,106 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs  
+dist/
+build/
+*.d.ts
+
+# Test files and results
+test-results/
+playwright-report/
+test-*.html
+*.spec.ts
+*.spec.js
+
+# Development subdirectory (contains separate project)
+muvera-visualization/
+
+# Development scripts
+dev-scripts/
+
+# Python development
+muvera-py/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Media files (keep README images)
+media/
+*.mp4
+*.avi
+*.mov
+*.gif
+*.webm
+# Keep the main visualization image
+!muvera-original-fixed.png
+
+# Temporary and debug files
+*.tmp
+*.log
+debug-*.json
+
+# Logs and debug files
+*.log
+debug-*.json
+
+# Web Worker compiled files
+*worker.js.map
+*worker-manager.js.map
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Runtime files
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
