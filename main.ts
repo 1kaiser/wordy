@@ -592,13 +592,24 @@ class MuVeRaAnimation {
   private async regenerateEmbeddings(): Promise<void> {
     if (!this.productionEmbeddingGemma) return;
     
-    this.embeddingStatus.text('🔄 Regenerating embeddings for new texts...');
+    this.embeddingStatus.text('🔄 Regenerating embeddings for visualization...');
     
     try {
+      // Time the query embedding
+      const queryStartTime = performance.now();
       this.queryEmbedding = await this.productionEmbeddingGemma.generateEmbedding(`search_query: ${this.queryText}`);
-      this.docEmbedding = await this.productionEmbeddingGemma.generateEmbedding(`search_document: ${this.docText}`);
+      const queryTime = performance.now() - queryStartTime;
       
-      this.embeddingStatus.text(`✅ Updated embeddings for new texts!`);
+      // Time the document embedding
+      const docStartTime = performance.now();
+      this.docEmbedding = await this.productionEmbeddingGemma.generateEmbedding(`search_document: ${this.docText}`);
+      const docTime = performance.now() - docStartTime;
+      
+      // Display timing information
+      this.embeddingStatus.text(`✅ Embeddings updated | Query: ${queryTime.toFixed(0)}ms | Doc: ${docTime.toFixed(0)}ms`);
+      console.log(`⏱️ Visualization embeddings: Query ${queryTime.toFixed(0)}ms, Document ${docTime.toFixed(0)}ms`);
+      
+      // Update the comparison panel with new embeddings
       this.updateComparisonPanel();
     } catch (error) {
       console.error('❌ Failed to regenerate embeddings:', error);
