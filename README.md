@@ -6,7 +6,7 @@ Production-ready browser implementation of Google Research's **MuVeRa: Making Mu
 
 ## 🎯 Interactive Visualization
 
-![MuVeRa Browser Visualization](muvera-original-fixed.png)
+![MuVeRa Browser Application](muvera-application-screenshot.png)
 
 The application features side-by-side query vs document FDE construction with:
 - **Real-time Animation**: Watch tokens being processed through semantic space partitioning
