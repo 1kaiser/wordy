@@ -10,4 +10,10 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
   },
+  optimizeDeps: {
+    exclude: ['@huggingface/transformers']
+  },
+  define: {
+    global: 'globalThis',
+  },
 })
