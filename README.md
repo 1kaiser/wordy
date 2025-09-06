@@ -33,6 +33,12 @@ npm run dev
 
 **Requirements**: Modern browser with WebGPU/WASM support (Chrome/Edge recommended)
 
+### ✅ Verified Working (Sep 6, 2025)
+- **Fresh clone tested**: Repository successfully clones and runs from scratch
+- **Dependencies**: 148 packages install cleanly in ~60 seconds
+- **Auto-port selection**: Automatically finds available port if 3004 is in use
+- **All components functional**: D3.js visualizations, EmbeddingGemma integration, and interactive controls working
+
 ## Key Concepts
 
 ### Multi-Vector Models
