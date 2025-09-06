@@ -1,5 +1,7 @@
 # MuVeRa Browser - Multi-Vector Retrieval with EmbeddingGemma
 
+## 🌐 [Live Demo](https://1kaiser.github.io/muvera-browser/)
+
 Production-ready browser implementation of Google Research's **MuVeRa: Making Multi-Vector Retrieval as Fast as Single-Vector Search** with state-of-the-art EmbeddingGemma semantic embeddings.
 
 **Paper Source**: https://research.google/blog/muvera-making-multi-vector-retrieval-as-fast-as-single-vector-search/
