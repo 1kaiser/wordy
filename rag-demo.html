@@ -395,20 +395,34 @@
                 updateStatus('corpus-status', 'Loading...', 'loading');
                 log('📦 Loading WordNet corpus metadata...', 'info');
 
-                // Load metadata (words)
-                const metadataRes = await fetch('./corpus-metadata.json');
-                if (!metadataRes.ok) {
-                    throw new Error(`Failed to load corpus metadata: ${metadataRes.statusText}`);
+                // Load metadata (words) - from GitHub release or local fallback
+                const metadataUrl = './corpus-metadata.json';
+                const releaseMetadataUrl = 'https://github.com/1kaiser/wordy/releases/download/v1.0.0/corpus-metadata.json';
+
+                let metadataRes = await fetch(metadataUrl).catch(() => null);
+                if (!metadataRes || !metadataRes.ok) {
+                    log('📥 Downloading corpus metadata from GitHub release...', 'info');
+                    metadataRes = await fetch(releaseMetadataUrl);
+                    if (!metadataRes.ok) {
+                        throw new Error(`Failed to load corpus metadata: ${metadataRes.statusText}`);
+                    }
                 }
                 const metadata = await metadataRes.json();
 
                 log('📦 Loading 768D embeddings (433MB)...', 'info');
                 updateStatus('corpus-status', 'Loading embeddings...', 'loading');
 
-                // Load embeddings binary
-                const embeddingsRes = await fetch('./corpus-embeddings.bin');
-                if (!embeddingsRes.ok) {
-                    throw new Error(`Failed to load embeddings: ${embeddingsRes.statusText}`);
+                // Load embeddings binary - from GitHub release or local fallback
+                const embeddingsUrl = './corpus-embeddings.bin';
+                const releaseEmbeddingsUrl = 'https://github.com/1kaiser/wordy/releases/download/v1.0.0/corpus-embeddings.bin';
+
+                let embeddingsRes = await fetch(embeddingsUrl).catch(() => null);
+                if (!embeddingsRes || !embeddingsRes.ok) {
+                    log('📥 Downloading corpus embeddings from GitHub release (433MB)...', 'info');
+                    embeddingsRes = await fetch(releaseEmbeddingsUrl);
+                    if (!embeddingsRes.ok) {
+                        throw new Error(`Failed to load embeddings: ${embeddingsRes.statusText}`);
+                    }
                 }
                 const embeddingsBuffer = await embeddingsRes.arrayBuffer();
 
