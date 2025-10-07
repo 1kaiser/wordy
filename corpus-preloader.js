@@ -6,6 +6,7 @@
 
 class CorpusPreloader {
     constructor() {
+        this.instanceId = Math.random().toString(36).substr(2, 5);
         this.dbName = 'WordyCorpusDB';
         this.dbVersion = 1;
         this.storeName = 'corpus';
@@ -15,21 +16,24 @@ class CorpusPreloader {
     }
 
     async init() {
-        console.log('📦 Corpus Preloader: Initializing...');
+        console.log(`📦 Corpus Preloader [${this.instanceId}]: Initializing...`);
 
         // Open IndexedDB
         this.db = await this.openDB();
 
         // Check if corpus already cached
         const cached = await this.isCorpusCached();
+        console.log(`🔍 cached variable value: ${cached} (type: ${typeof cached})`);
 
         if (cached) {
-            console.log('✅ Corpus already cached in IndexedDB');
+            console.log(`✅ Corpus already cached in IndexedDB [${this.instanceId}]`);
             return;
+        } else {
+            console.log(`❌ Corpus NOT cached, will download [${this.instanceId}]`);
         }
 
         // Start background download
-        console.log('📥 Starting background corpus download (455MB)...');
+        console.log(`📥 Starting background corpus download (455MB)... [${this.instanceId}]`);
         this.startBackgroundDownload();
     }
 
@@ -53,7 +57,9 @@ class CorpusPreloader {
         try {
             const metadata = await this.getFromDB('metadata');
             const embeddings = await this.getFromDB('embeddings');
-            return metadata !== null && embeddings !== null;
+            console.log(`🔍 isCorpusCached check: metadata=${!!metadata}, embeddings=${!!embeddings}`);
+            // Check for truthy values, not just !== null (undefined also needs to return false)
+            return !!metadata && !!embeddings;
         } catch (error) {
             console.warn('⚠️ Error checking cache:', error);
             return false;
@@ -91,13 +97,26 @@ class CorpusPreloader {
         this.isDownloading = true;
 
         try {
-            // Download metadata (22MB)
+            // Try relative URL first (local dev), fallback to GitHub Pages (production)
             console.log('📥 Downloading corpus metadata (22MB)...');
-            const metadataUrl = 'https://github.com/1kaiser/wordy/releases/download/v1.0.0/corpus-metadata.json';
-            const metadataRes = await fetch(metadataUrl);
+            const metadataUrls = [
+                './corpus-metadata.json',  // Relative path for local/production
+                'https://1kaiser.github.io/wordy/corpus-metadata.json'  // Fallback
+            ];
 
-            if (!metadataRes.ok) {
-                throw new Error(`Failed to download metadata: ${metadataRes.statusText}`);
+            let metadataRes = null;
+            for (const url of metadataUrls) {
+                try {
+                    console.log(`📡 Trying: ${url}`);
+                    metadataRes = await fetch(url);
+                    if (metadataRes.ok) break;
+                } catch (e) {
+                    console.warn(`⚠️ Failed to fetch from ${url}:`, e.message);
+                }
+            }
+
+            if (!metadataRes || !metadataRes.ok) {
+                throw new Error(`Failed to download metadata from all sources`);
             }
 
             const metadata = await metadataRes.json();
@@ -106,12 +125,24 @@ class CorpusPreloader {
 
             // Download embeddings (433MB) with progress tracking
             console.log('📥 Downloading corpus embeddings (433MB)... This may take a few minutes');
-            const embeddingsUrl = 'https://github.com/1kaiser/wordy/releases/download/v1.0.0/corpus-embeddings.bin';
+            const embeddingsUrls = [
+                './corpus-embeddings.bin',  // Relative path for local/production
+                'https://1kaiser.github.io/wordy/corpus-embeddings.bin'  // Fallback
+            ];
 
-            const embeddingsRes = await fetch(embeddingsUrl);
+            let embeddingsRes = null;
+            for (const url of embeddingsUrls) {
+                try {
+                    console.log(`📡 Trying: ${url}`);
+                    embeddingsRes = await fetch(url);
+                    if (embeddingsRes.ok) break;
+                } catch (e) {
+                    console.warn(`⚠️ Failed to fetch from ${url}:`, e.message);
+                }
+            }
 
-            if (!embeddingsRes.ok) {
-                throw new Error(`Failed to download embeddings: ${embeddingsRes.statusText}`);
+            if (!embeddingsRes || !embeddingsRes.ok) {
+                throw new Error(`Failed to download embeddings from all sources`);
             }
 
             // Get content length for progress
@@ -176,13 +207,19 @@ class CorpusPreloader {
     }
 
     async getCorpus() {
+        console.log('🔍 getCorpus() called');
         const metadata = await this.getFromDB('metadata');
+        console.log(`📦 metadata from DB:`, metadata ? `YES (${metadata.words?.length || 0} words)` : 'NO');
+
         const embeddingsBuffer = await this.getFromDB('embeddings');
+        console.log(`📦 embeddings from DB:`, embeddingsBuffer ? `YES (${embeddingsBuffer.byteLength || 0} bytes)` : 'NO');
 
         if (!metadata || !embeddingsBuffer) {
+            console.log('❌ Corpus incomplete in IndexedDB');
             return null;
         }
 
+        console.log('✅ Corpus complete - returning data');
         return {
             words: metadata.words,
             embeddings: new Float32Array(embeddingsBuffer)
