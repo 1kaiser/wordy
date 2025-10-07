@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/muvera-browser/',
+  base: '/wordy/',
   server: {
     host: '0.0.0.0', // Allow external connections
     port: 3004,

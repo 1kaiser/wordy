@@ -1,163 +1,265 @@
-# MuVeRa Browser - Development Documentation
+# Wordy - Development Documentation
 
 ## Project Overview
-**MuVeRa Browser** is a production-ready browser implementation of Google Research's Multi-Vector Retrieval algorithm with EmbeddingGemma semantic embeddings integration.
+**Wordy** is a production-ready browser-based semantic AI platform with three integrated features:
+1. **Minimal Search** - WordNet Interactive Word Replacement (main interface)
+2. **MuVeRa Search** - Multi-Vector Retrieval with EmbeddingGemma (sliding panel)
+3. **RAG Pipeline** - Complete Retrieval-Augmented Generation (sliding panel)
 
-## Repository Status (Sep 6, 2025)
+## Repository Status (Oct 7, 2025)
 ✅ **PRODUCTION READY** - Fully functional, tested, and verified
 
-### Recent Achievements
-- Complete MuVeRa FDE algorithm implementation with side-by-side visualization
-- EmbeddingGemma 768D semantic embeddings with browser-native inference
-- Interactive D3.js animations showing token processing through semantic space
-- Document processing with file upload and semantic search capabilities
-- Collapsible mathematical calculations for algorithm transparency
-- Clean repository structure with professional organization
+### Recent Achievements (Oct 7, 2025)
+- ✅ **Project renamed** from muvera-browser to wordy
+- ✅ **GitHub repository renamed** to 1kaiser/wordy
+- ✅ **Minimal search as main interface** with sliding panel architecture
+- ✅ **Lazy-loading strategy** for 455MB corpus files
+- ✅ **All Playwright tests passing** (11/11)
+- ✅ **Dual sliding panels** for MuVeRa and RAG features
 
-## Technical Architecture
+### Technical Architecture
 
-### Core Components (Organized Structure - Sep 6, 2025)
+#### Main Interface
+**Minimal Search** (`index.html`)
+- Clean centered text input with blinking cursor
+- Vue.js-powered word visualization with SVG boxes
+- Voice input support (microphone button)
+- Real-time word alternatives with similarity scores
+- Two toggle buttons in top-right corner
+
+#### Sliding Panels (Lazy-Loaded)
+1. **🔄 MuVeRa Search** (purple/blue button, right side)
+   - Multi-Vector Retrieval with EmbeddingGemma
+   - Google Research's FDE algorithm
+   - 768D semantic embeddings
+   - Side-by-side query vs document visualization
+
+2. **🤖 RAG Pipeline** (orange button, far right)
+   - Complete Retrieval-Augmented Generation
+   - 147,480 word corpus with embeddings
+   - Gemma-3-270M model integration
+   - **Lazy-loaded**: Corpus downloads ONLY when user clicks RAG button
+
+### Core Components
 ```
-muvera-browser/
-├── src/                             # All TypeScript source files
-│   ├── main.ts                      # Main application logic
-│   ├── fde-algorithm.ts             # FDE implementation
-│   ├── production-embedding-gemma.ts # EmbeddingGemma integration
-│   ├── embedding-gemma-vectorizer.ts # Vectorization
-│   └── text-vectorizer.ts           # Text processing
-├── public/
-│   └── assets/                      # Screenshots and images
-├── components/                      # Reusable components
-├── docs/                           # Documentation
-├── index.html                      # Main UI
-└── [config files]                  # package.json, tsconfig, vite
+wordy/
+├── index.html                    # Minimal search interface
+├── minimal-search.js             # 29KB - Main functionality
+├── muvera.html                   # MuVeRa panel (lazy-loaded)
+├── rag-demo.html                 # RAG panel (lazy-loaded)
+├── corpus-metadata.json          # 22MB (lazy-loaded)
+├── corpus-embeddings.bin         # 433MB (lazy-loaded)
+├── dict/                         # 53MB WordNet data
+├── 32145473.txt                  # 3.4MB Oxford Science Dictionary
+└── src/
+    ├── rag/modules/              # RAG module files
+    ├── muvera/                   # MuVeRa TypeScript
+    └── wordnet/                  # WordNet processing
 ```
 
-### Key Features
-1. **Auto-loading EmbeddingGemma** - Starts downloading 308M parameter model on page load
-2. **Progressive Workflow** - Model loading → Document processing → Semantic search
-3. **Real-time Timing Metrics** - Shows embedding generation times for transparency
-4. **Side-by-side Visualization** - Query vs Document FDE construction animations
-5. **Mathematical Transparency** - Step-by-step calculations (collapsible by default)
+### Lazy-Loading Implementation
 
-## Performance Benchmarks
+**Strategy**: Corpus files (455MB total) load ONLY when user clicks RAG button
 
-### Model Loading
-- **Initial Download**: ~160MB ONNX model files
-- **Loading Time**: 30-120s first time, 5-15s cached
+**Implementation**:
+```html
+<!-- iframe with data-src (not src) - loads ONLY on click -->
+<iframe id="rag-iframe" data-src="rag-demo.html"></iframe>
+```
+
+```javascript
+// JavaScript loads iframe on button click
+function toggleRAGDemo() {
+    const iframe = document.getElementById('rag-iframe');
+    if (!iframe.src && iframe.dataset.src) {
+        iframe.src = iframe.dataset.src;  // Triggers load
+    }
+}
+```
+
+**User Experience**:
+1. Visit site → **29KB** loads (minimal-search.js only)
+2. Type/interact → Instant, no corpus needed
+3. Click RAG button → **455MB corpus downloads in background**
+4. Future visits → Browser cache serves corpus instantly
+
+### Performance Benchmarks
+
+#### Initial Page Load
+- **HTML + CSS**: <10KB
+- **JavaScript**: 29KB (minimal-search.js)
+- **Total**: <100KB first load
+- **Time**: <1 second
+
+#### Panel Interaction
+- **MuVeRa Panel**: Lazy-loaded on first click (~2-5s)
+- **RAG Panel**: Lazy-loaded with 455MB corpus (~30-60s first time)
+- **Subsequent**: Instant from browser cache
+
+#### Embedding Generation
+- **EmbeddingGemma Loading**: 43s (308M parameter model)
+- **Per Document**: ~994ms for 768D embeddings
+- **Per Query**: ~800-1200ms with search_query prefix
 - **Memory Usage**: ~400-800MB during inference
 
-### Embedding Generation
-- **Per Document**: ~1000-1500ms for 768D embeddings
-- **Per Query**: ~800-1200ms with search_query prefix
-- **Batch Processing**: Progressive with visual feedback
-
-### Search Performance
+#### Search Performance
 - **Similarity Calculation**: <50ms for cosine similarity
 - **Result Ranking**: Instant with top-K selection
-- **UI Updates**: Real-time with D3.js animations
+- **UI Updates**: Real-time with Vue.js reactivity
 
-## Development Workflow
+### Development Workflow
 
-### Local Development
+#### Local Development
 ```bash
-# Main development server (port 3005)
+# Main development server (port 3004)
 npm run dev
 
-# The application auto-selects ports if 3004 is busy
-# Runs on 3005, 3006, etc. as needed
+# Server runs on http://localhost:3004/wordy/
+# Auto-selects ports if 3004 is busy (3005, 3006, etc.)
 ```
 
-### Testing Fresh Clone
+#### Testing
 ```bash
-# Verified working process
-cd /tmp
-git clone https://github.com/1kaiser/muvera-browser.git test-dir
-cd test-dir
-npm install  # 148 packages, ~60 seconds
-npm run dev  # Auto-starts on available port
+# Run Playwright tests
+npx playwright test tests/wordy-integration.spec.cjs --project=chromium --workers=4
+
+# Results: 11/11 tests passing in ~22 seconds
 ```
 
-## Repository Verification (Sep 6, 2025)
+#### Build for Production
+```bash
+# Build static files
+npm run build
 
-### ✅ Clone Test Results
-- **Repository Size**: Clean, focused structure
-- **Dependencies**: 148 packages install without issues
-- **Build Time**: Instant with Vite dev server
-- **Port Handling**: Automatic selection of available ports
-- **UI Components**: All elements render correctly
-- **D3.js Visualizations**: SVG animations working
-- **EmbeddingGemma**: Auto-loads on page start
+# Deploy to GitHub Pages
+npm run deploy
+```
 
-### Test Commands Used
+### Test Coverage
+
+All tests passing (11/11):
+1. ✅ Minimal search interface loads correctly
+2. ✅ MuVeRa panel slides in and out correctly
+3. ✅ RAG panel slides in and out correctly
+4. ✅ Only one panel can be open at a time
+5. ✅ ESC key closes MuVeRa panel
+6. ✅ ESC key closes RAG panel
+7. ✅ MuVeRa iframe loads on first click
+8. ✅ RAG iframe loads on first click
+9. ✅ Text input accepts typing
+10. ✅ Buttons have correct styling
+11. ✅ No critical JavaScript errors on page load
+
+### Key Features
+
+#### Panel Behavior
+- Only one panel open at a time (auto-closes other)
+- Smooth 0.5s slide-in animation from right
+- ESC key closes any open panel
+- Button text changes: "🔄 MuVeRa Search" → "← Back to Search"
+
+#### Performance Optimizations
+- Lazy-loaded iframes (data-src attribute)
+- Browser caching for large files (455MB corpus)
+- WebGPU acceleration for embeddings
+- WASM fallback for compatibility
+- Vue.js reactivity for instant UI updates
+
+### Repository Configuration
+
+#### Git Remote
+- **URL**: https://github.com/1kaiser/wordy.git
+- **Live Demo**: https://1kaiser.github.io/wordy/
+
+#### Vite Configuration
+```typescript
+export default defineConfig({
+  base: '/wordy/',  // Updated from /muvera-browser/
+  server: {
+    host: '0.0.0.0',
+    port: 3004,
+    strictPort: false,
+  },
+  // ... rest of config
+})
+```
+
+#### Playwright Configuration
 ```javascript
-// Playwright test to verify functionality
-- Page loads successfully
-- SVG elements present
-- Input controls functional
-- Calculations section collapsible
-- EmbeddingGemma status displays
+module.exports = defineConfig({
+  use: {
+    baseURL: 'http://localhost:3004/wordy/',  // Updated
+  },
+  webServer: {
+    url: 'http://localhost:3004/wordy/',  // Updated
+  },
+})
 ```
 
-## Git Management
+### Browser Compatibility
 
-### Clean Repository Structure
-```
-✅ Visible Files (tracked):
-- Core TypeScript modules
-- Configuration files
-- README with screenshot
-- Components directory
-
-❌ Hidden (gitignored):
-- muvera-visualization/ (dev subdirectory)
-- node_modules/
-- dev-scripts/
-- test files
-- Python directories
-```
-
-### Recent Commits
-- `5a6679d` - Updated README with actual application screenshot
-- `359e4c3` - Removed duplicate muvera-package.json
-- `8babefa` - Removed muvera-visualization from tracking
-- `247c1a7` - Fixed SVG visualization with D3.js
-- `0600aab` - Repository cleanup and organization
-
-## Browser Compatibility
-
-### Recommended
+#### Recommended
 - **Chrome/Edge**: Full WebGPU support for EmbeddingGemma
 - **Chrome Canary**: Best performance with experimental features
 
-### Supported
+#### Supported
 - **Firefox**: WASM fallback (slower embeddings)
 - **Safari**: Limited WebGPU, uses WASM
 
-## Known Issues & Solutions
+### Known Issues & Solutions
 
-### Issue: SVG not rendering
-**Solution**: Added D3.js CDN link to index.html
+#### Issue: Page timeouts in Playwright
+**Solution**: Changed from `waitForLoadState('networkidle')` to `waitForLoadState('domcontentloaded')`
 
-### Issue: Button initialization error
-**Solution**: Removed unused loadEmbeddingBtn references
+#### Issue: Iframe src attribute null
+**Solution**: Updated tests to expect `null` instead of empty string for lazy-loaded iframes
 
-### Issue: Port conflicts
+#### Issue: Port conflicts
 **Solution**: Vite auto-selects next available port
 
-## Future Enhancements
-- GitHub Pages deployment for live demo
+### Deployment Strategy
+
+#### GitHub Pages
+- **URL**: https://1kaiser.github.io/wordy/
+- **Corpus Files**: Included in repository (within 1GB limit)
+- **Lazy-Loading**: Corpus downloads on first RAG button click
+- **Caching**: Browser caches for instant repeat visits
+
+#### File Sizes
+- **Total Repository**: ~550MB (with corpus)
+- **Initial Load**: <100KB
+- **Full Experience**: ~555MB (after RAG activation)
+
+### Future Enhancements
+- Unified settings panel for all three features
+- Shared embedding manager singleton
+- Export functionality for embeddings
 - Performance benchmarking dashboard
 - Additional embedding model options
-- Export functionality for embeddings
 - API endpoint for programmatic access
 
-## Development Notes
+### Development Notes
 - Always run `npm install` after cloning
 - Use Chrome/Edge for best WebGPU performance
 - Monitor console for embedding timing metrics
-- Collapsible sections improve UI performance
+- Tests use Chrome (not Chromium) for WebGPU support
 - File upload supports .txt and .md formats
+- ESC key uses capture phase to avoid Vue conflicts
+
+### Integration Summary
+
+**Previous State** (Sep 6, 2025):
+- Separate muvera-browser and wordnet-3d-visualization repos
+- Landing page with feature cards
+- No lazy-loading strategy
+
+**Current State** (Oct 7, 2025):
+- ✅ Unified "wordy" repository
+- ✅ Minimal search as main interface
+- ✅ Dual sliding panels for MuVeRa and RAG
+- ✅ Lazy-loading for 455MB corpus
+- ✅ All tests passing (11/11)
+- ✅ Production-ready deployment
 
 ---
 *This documentation is maintained alongside the codebase for development reference*

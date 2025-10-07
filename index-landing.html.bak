@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wordy - Semantic AI Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .container {
+            max-width: 1200px;
+            padding: 40px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .tagline {
+            font-size: 1.5rem;
+            margin-bottom: 60px;
+            opacity: 0.95;
+            font-weight: 300;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+            margin-top: 60px;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .feature-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .feature-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .feature-description {
+            font-size: 1rem;
+            opacity: 0.9;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .feature-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            opacity: 0.8;
+            text-transform: uppercase;
+        }
+
+        .coming-soon {
+            background: rgba(255, 215, 0, 0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            display: inline-block;
+            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        footer {
+            margin-top: 80px;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: white;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+            transition: border-color 0.3s;
+        }
+
+        footer a:hover {
+            border-bottom-color: white;
+        }
+
+        /* Panel overlay */
+        .panel-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+
+        .panel-overlay.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .panel-content {
+            background: white;
+            width: 95%;
+            height: 95%;
+            border-radius: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg);
+        }
+
+        .panel-iframe {
+            width: 100%;
+            height: calc(100% - 80px);
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔤 Wordy</h1>
+        <p class="tagline">Browser-Based Semantic AI Platform</p>
+        <p style="font-size: 1.1rem; margin-bottom: 20px;">
+            Explore language and semantics with three powerful AI tools.<br>
+            100% local. Zero API costs. Just your browser.
+        </p>
+
+        <div class="features">
+            <!-- MuVeRa Card -->
+            <div class="feature-card" onclick="openPanel('muvera')">
+                <span class="feature-icon">🔄</span>
+                <h3 class="feature-title">MuVeRa</h3>
+                <p class="feature-description">
+                    Multi-Vector Retrieval with Google Research's FDE algorithm.
+                    90% faster than traditional multi-vector search.
+                </p>
+                <div class="feature-stats">
+                    <div class="stat">
+                        <span class="stat-value">768D</span>
+                        <span class="stat-label">Embeddings</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">90%</span>
+                        <span class="stat-label">Faster</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">0</span>
+                        <span class="stat-label">API Costs</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WordNet 3D Card -->
+            <div class="feature-card" onclick="openPanel('wordnet')">
+                <span class="feature-icon">🌐</span>
+                <h3 class="feature-title">WordNet 3D</h3>
+                <p class="feature-description">
+                    Interactive 3D visualization of 158,000+ words in semantic space
+                    using UMAP and Scatter-GL.
+                </p>
+                <div class="feature-stats">
+                    <div class="stat">
+                        <span class="stat-value">158K</span>
+                        <span class="stat-label">Words</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">3D</span>
+                        <span class="stat-label">WebGL</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">UMAP</span>
+                        <span class="stat-label">Algorithm</span>
+                    </div>
+                </div>
+                <span class="coming-soon">Coming Soon</span>
+            </div>
+
+            <!-- RAG Pipeline Card -->
+            <div class="feature-card" onclick="openPanel('rag')">
+                <span class="feature-icon">🤖</span>
+                <h3 class="feature-title">RAG Pipeline</h3>
+                <p class="feature-description">
+                    Complete Retrieval-Augmented Generation with Gemma-3-270M.
+                    147K word corpus with browser-native LLM.
+                </p>
+                <div class="feature-stats">
+                    <div class="stat">
+                        <span class="stat-value">147K</span>
+                        <span class="stat-label">Corpus</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">17ms</span>
+                        <span class="stat-label">Retrieval</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">270M</span>
+                        <span class="stat-label">Parameters</span>
+                    </div>
+                </div>
+                <span class="coming-soon">Coming Soon</span>
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                Built with ❤️ using browser AI •
+                <a href="https://github.com/1kaiser/wordy" target="_blank">GitHub</a> •
+                <a href="https://github.com/1kaiser/wordy/blob/main/README.md" target="_blank">Documentation</a>
+            </p>
+        </footer>
+    </div>
+
+    <!-- Panel Overlay for MuVeRa -->
+    <div class="panel-overlay" id="muvera-panel">
+        <div class="panel-content">
+            <div class="panel-header">
+                <h2>🔄 MuVeRa - Multi-Vector Retrieval</h2>
+                <button class="close-btn" onclick="closePanel('muvera')">×</button>
+            </div>
+            <iframe class="panel-iframe" id="muvera-iframe" src=""></iframe>
+        </div>
+    </div>
+
+    <!-- Panel Overlay for WordNet -->
+    <div class="panel-overlay" id="wordnet-panel">
+        <div class="panel-content">
+            <div class="panel-header">
+                <h2>🌐 WordNet 3D Visualization</h2>
+                <button class="close-btn" onclick="closePanel('wordnet')">×</button>
+            </div>
+            <iframe class="panel-iframe" id="wordnet-iframe" src=""></iframe>
+        </div>
+    </div>
+
+    <!-- Panel Overlay for RAG -->
+    <div class="panel-overlay" id="rag-panel">
+        <div class="panel-content">
+            <div class="panel-header">
+                <h2>🤖 RAG Pipeline</h2>
+                <button class="close-btn" onclick="closePanel('rag')">×</button>
+            </div>
+            <iframe class="panel-iframe" id="rag-iframe" src=""></iframe>
+        </div>
+    </div>
+
+    <script>
+        function openPanel(feature) {
+            const panel = document.getElementById(`${feature}-panel`);
+            const iframe = document.getElementById(`${feature}-iframe`);
+
+            // Set iframe source based on feature
+            if (feature === 'muvera') {
+                iframe.src = 'muvera.html';
+            } else if (feature === 'wordnet') {
+                iframe.src = 'wordnet-3d.html';
+            } else if (feature === 'rag') {
+                iframe.src = 'rag-panel.html';
+            }
+
+            panel.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closePanel(feature) {
+            const panel = document.getElementById(`${feature}-panel`);
+            const iframe = document.getElementById(`${feature}-iframe`);
+
+            panel.classList.remove('active');
+            iframe.src = ''; // Unload iframe
+            document.body.style.overflow = 'auto';
+        }
+
+        // Close panel on ESC key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                ['muvera', 'wordnet', 'rag'].forEach(closePanel);
+            }
+        });
+
+        // Close panel when clicking overlay background
+        document.querySelectorAll('.panel-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    const panelId = overlay.id.replace('-panel', '');
+                    closePanel(panelId);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

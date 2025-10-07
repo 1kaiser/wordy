@@ -1,0 +1,19 @@
+{
+  "name": "science-dict-extractor",
+  "version": "1.0.0",
+  "description": "Extract scientific terms from Oxford Dictionary of Science with category classification",
+  "main": "index.js",
+  "type": "module",
+  "keywords": [
+    "science",
+    "dictionary",
+    "oxford",
+    "term-extraction",
+    "classification",
+    "physics",
+    "chemistry",
+    "biology"
+  ],
+  "author": "",
+  "license": "MIT"
+}

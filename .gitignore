@@ -104,3 +104,7 @@ jspm_packages/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Large corpus files (will be in GitHub release)
+corpus-metadata.json
+corpus-embeddings.bin

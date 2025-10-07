@@ -1,0 +1,19 @@
+{
+  "name": "wordnet-extractor",
+  "version": "1.0.0",
+  "description": "Extract all words from WordNet 3.1 dictionary with part-of-speech metadata",
+  "main": "index.js",
+  "type": "module",
+  "keywords": [
+    "wordnet",
+    "lexical-database",
+    "word-extraction",
+    "nlp",
+    "linguistics",
+    "dictionary"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

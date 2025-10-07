@@ -6,8 +6,8 @@
  */
 
 import * as d3 from 'd3';
-import { TextFDEProcessor } from './text-vectorizer.js';
-import { ProductionEmbeddingGemma, createProductionEmbeddingGemma } from './production-embedding-gemma.js';
+import { TextFDEProcessor } from './muvera/text-vectorizer.js';
+import { ProductionEmbeddingGemma, createProductionEmbeddingGemma } from './muvera/production-embedding-gemma.js';
 
 interface AnimationState {
   step: number;

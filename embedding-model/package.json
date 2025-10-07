@@ -1,0 +1,27 @@
+{
+  "name": "@browser-ai/embedding-model",
+  "version": "1.0.0",
+  "description": "Generate semantic text embeddings in the browser using Transformers.js and Xenova/all-MiniLM-L6-v2",
+  "type": "module",
+  "main": "index.js",
+  "keywords": [
+    "embeddings",
+    "semantic-search",
+    "transformers",
+    "wasm",
+    "browser-ai",
+    "nlp",
+    "machine-learning",
+    "text-similarity",
+    "vector-search"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.2"
+  },
+  "peerDependencies": {},
+  "exports": {
+    ".": "./index.js"
+  }
+}

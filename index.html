@@ -1,731 +1,597 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MuVeRa FDE Construction + EmbeddingGemma</title>
-    <script src="https://d3js.org/d3.v5.min.js"></script>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WordNet - Minimal Search</title>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap');
-      
-      body {
-        font-family: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        margin: 0;
-        padding: 40px;
-        background: #fafafa;
-        color: #333;
-      }
-      
-      /* Full width containers */
-      .animation-container {
-        width: 100%;
-        margin: 0 0 40px 0;
-        background: white;
-        padding: 20px;
-        border: 2px solid #e0e0e0;
-      }
-
-      .input-controls {
-        width: 100%;
-        margin: 0 0 20px 0;
-        background: white;
-        padding: 20px;
-        border: 2px solid #e0e0e0;
-      }
-
-      h1, h2 {
-        font-family: 'Google Sans', sans-serif;
-        text-align: center;
-        color: #333;
-      }
-
-      h1 {
-        font-size: 28px;
-        font-weight: 400;
-        margin: 0 0 30px 0;
-      }
-
-      h2 {
-        font-size: 20px;
-        font-weight: 500;
-        margin: 0 0 25px 0;
-      }
-
-      /* Input controls */
-      .input-group {
-        margin-bottom: 20px;
-      }
-
-      .input-group label {
-        display: block;
-        margin-bottom: 8px;
-        font-weight: 500;
-        color: #333;
-        font-family: 'Google Sans', sans-serif;
-      }
-
-      .input-group input, .input-group textarea, .input-group select {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e0e0e0;
-        font-family: 'Google Sans', sans-serif;
-        font-size: 14px;
-        transition: border-color 0.2s;
-      }
-
-      .input-group input:focus, .input-group textarea:focus, .input-group select:focus {
-        outline: none;
-        border-color: #4285f4;
-      }
-
-      .input-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-      }
-
-      .control-buttons {
-        display: flex;
-        gap: 15px;
-        justify-content: center;
-        margin-top: 20px;
-      }
-
-      .btn {
-        padding: 12px 24px;
-        border: 2px solid transparent;
-        font-family: 'Google Sans', sans-serif;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-
-      .btn-primary {
-        background: #4285f4;
-        color: white;
-        border-color: #4285f4;
-      }
-
-      .btn-primary:hover {
-        background: #3367d6;
-        border-color: #3367d6;
-      }
-
-      .btn-secondary {
-        background: #f8f9fa;
-        color: #333;
-        border-color: #dadce0;
-      }
-
-      .btn-secondary:hover {
-        background: #e8eaed;
-        border-color: #bbb;
-      }
-
-      /* Mathematical Calculations Section */
-      .calculations-section {
-        background: #f8f9fa;
-        border: 2px solid #e9ecef;
-        border-radius: 8px;
-        padding: 25px;
-        margin-bottom: 30px;
-      }
-
-      #calculations-header {
-        cursor: pointer;
-        user-select: none;
-        padding: 8px;
-        transition: background-color 0.2s;
-      }
-
-      #calculations-header:hover {
-        background-color: #f5f5f5;
-        border-radius: 4px;
-      }
-
-      #calculations-toggle {
-        font-size: 16px;
-        margin-left: 8px;
-        transition: transform 0.2s ease;
-      }
-
-      .calculations-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 25px;
-        margin-bottom: 25px;
-      }
-
-      .calculation-panel {
-        background: white;
-        border: 2px solid #dadce0;
-        border-radius: 6px;
-        padding: 20px;
-      }
-
-      .calculation-panel h3 {
-        margin: 0 0 15px 0;
-        font-size: 16px;
-        font-weight: 600;
-        color: #333;
-        font-family: 'Google Sans', sans-serif;
-        border-bottom: 2px solid #e0e0e0;
-        padding-bottom: 8px;
-      }
-
-      .calc-stage {
-        margin-bottom: 15px;
-        padding: 12px;
-        background: #f8f9fa;
-        border-radius: 4px;
-        border-left: 4px solid #4285f4;
-      }
-
-      .calc-stage h4 {
-        margin: 0 0 8px 0;
-        font-size: 14px;
-        font-weight: 500;
-        color: #4285f4;
-        font-family: 'Google Sans', sans-serif;
-      }
-
-      .math-display {
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-        background: white;
-        padding: 10px;
-        border: 1px solid #dadce0;
-        border-radius: 4px;
-        line-height: 1.4;
-        color: #333;
-        white-space: pre-wrap;
-      }
-
-      /* Progress bars */
-      .progress-container {
-        background: #f0f0f0;
-        border-radius: 8px;
-        overflow: hidden;
-        height: 30px;
-        position: relative;
-        margin-bottom: 10px;
-      }
-
-      .progress-bar {
-        background: linear-gradient(90deg, #4285f4, #34a853);
-        height: 100%;
-        width: 0%;
-        transition: width 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .progress-text {
-        color: white;
-        font-weight: 500;
-        font-size: 12px;
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-      }
-
-      /* Status messages */
-      .status-message {
-        padding: 15px;
-        border-radius: 4px;
-        font-size: 14px;
-        text-align: center;
-        margin-bottom: 20px;
-      }
-
-      .status-info {
-        background: #e3f2fd;
-        border: 2px solid #2196f3;
-        color: #1976d2;
-      }
-
-      .status-success {
-        background: #e8f5e8;
-        border: 2px solid #4caf50;
-        color: #2e7d32;
-      }
-
-      .status-warning {
-        background: #fff3e0;
-        border: 2px solid #ff9800;
-        color: #f57c00;
-      }
-
-      /* Side-by-side layout */
-      .side-by-side-container {
-        display: flex;
-        gap: 30px;
-        align-items: flex-start;
-        margin-bottom: 30px;
-      }
-
-      .processing-side {
-        flex: 1;
-        background: #f8f9fa;
-        border: 2px solid #e9ecef;
-        border-radius: 8px;
-        padding: 20px;
-      }
-
-      .processing-title {
-        margin: 0 0 20px 0;
-        font-size: 16px;
-        font-weight: 600;
-        text-align: center;
-        color: #333;
-        font-family: 'Google Sans', sans-serif;
-        border-bottom: 2px solid #e0e0e0;
-        padding-bottom: 10px;
-      }
-
-      .processing-visualization {
-        display: flex;
-        gap: 20px;
-        align-items: flex-start;
-        margin-bottom: 20px;
-      }
-
-      .semantic-space {
-        flex: 1.2;
-      }
-
-      .fde-panel {
-        flex: 0.8;
-        background: white;
-        border: 1px solid #dadce0;
-        border-radius: 4px;
-        padding: 15px;
-      }
-
-      .fde-panel h3 {
-        margin: 0 0 15px 0;
-        font-size: 14px;
-        font-weight: 500;
-        color: #666;
-      }
-
-      #semantic-svg, #semantic-svg-doc {
-        width: 400px;
-        height: 400px;
-        background: white;
-        border: 2px solid #e0e0e0;
-      }
-
-      #fde-svg, #fde-svg-doc {
-        width: 100%;
-        height: 250px;
-        background: white;
-      }
-
-      .query-text {
-        margin-top: 20px;
-        padding: 15px;
-        background: #f5f5f5;
-        border: 1px solid #ddd;
-        font-size: 16px;
-        font-weight: 500;
-        text-align: center;
-        min-height: 20px;
-      }
-
-      .bottom-panel {
-        background: white;
-        border: 1px solid #dadce0;
-        border-radius: 4px;
-        padding: 15px;
-        min-height: 60px;
-      }
-
-      #bottom-svg, #bottom-svg-doc {
-        width: 100%;
-        height: 80px;
-        background: white;
-      }
-
-      /* Comparison panel */
-      .comparison-panel {
-        background: #e3f2fd;
-        border: 2px solid #2196f3;
-        border-radius: 8px;
-        padding: 20px;
-        margin-top: 20px;
-      }
-
-      .comparison-panel h3 {
-        margin: 0 0 15px 0;
-        font-size: 16px;
-        font-weight: 600;
-        text-align: center;
-        color: #1976d2;
-      }
-
-      .comparison-stats {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 15px;
-      }
-
-      .stat-item {
-        background: white;
-        padding: 12px;
-        border-radius: 4px;
-        border: 1px solid #bbdefb;
-        font-size: 14px;
-      }
-
-      .stat-item strong {
-        color: #1976d2;
-      }
-
-      .pause-overlay {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #333;
-        color: white;
-        padding: 10px 20px;
-        border: 2px solid #555;
-        font-size: 14px;
-        cursor: pointer;
-        z-index: 1000;
-      }
-
-      /* Responsive design */
-      @media (max-width: 1200px) {
-        .side-by-side-container {
-          flex-direction: column;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        
-        .comparison-stats {
-          grid-template-columns: 1fr;
+
+        body {
+            font-family: 'GT America', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
         }
-        
-        .calculations-grid {
-          grid-template-columns: 1fr;
+
+        #app {
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
         }
-      }
+
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.3s ease;
+        }
+
+        #loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-message {
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #ddd;
+            border-top-color: #e9411b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* Toggle Buttons */
+        .toggle-btn {
+            position: fixed;
+            top: 20px;
+            z-index: 10000;
+            background: white;
+            border: 2px solid #e9411b;
+            color: #e9411b;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .rag-toggle-btn {
+            right: 20px;
+        }
+
+        .muvera-toggle-btn {
+            right: 220px;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .toggle-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(233, 65, 27, 0.3);
+        }
+
+        .rag-toggle-btn:hover {
+            background: #e9411b;
+            color: white;
+        }
+
+        .muvera-toggle-btn:hover {
+            background: #667eea;
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        /* Slide-in Containers */
+        .slide-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            z-index: 9998;
+            overflow-y: auto;
+            transform: translateX(100%);
+            transition: transform 0.5s ease;
+        }
+
+        .slide-container.visible {
+            transform: translateX(0);
+        }
+
+        .slide-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* Blinking cursor input */
+        #text-input {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #000;
+            background: transparent;
+            border: none;
+            outline: none;
+            text-align: center;
+            min-width: 300px;
+            max-width: 80vw;
+            padding: 10px;
+            caret-color: #000;
+            z-index: -1;
+            transition: all 0.3s ease;
+            pointer-events: all;
+        }
+
+        #text-input.ready {
+            z-index: 10;
+        }
+
+        /* Hide input text when word boxes are shown, but keep cursor visible */
+        #text-input.has-words {
+            color: transparent;
+            caret-color: #e9411b; /* Bright orange cursor for visibility */
+            z-index: 100; /* Ensure cursor is above SVG elements */
+        }
+
+        #text-input::placeholder {
+            color: #999;
+            opacity: 0;
+            animation: fadePlaceholder 2s ease-in-out infinite;
+        }
+
+        @keyframes fadePlaceholder {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
+        /* SVG container */
+        #svg-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #main-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Word boxes */
+        .word-box {
+            cursor: pointer;
+            pointer-events: all;
+            transition: all 0.2s ease;
+        }
+
+        .word-box:hover rect {
+            stroke: #e9411b;
+            stroke-opacity: 0.5;
+        }
+
+        .word-box.selected rect {
+            stroke: #e9411b;
+            stroke-opacity: 0.8;
+        }
+
+        .word-box.disabled {
+            opacity: 0.4;
+            cursor: default;
+            pointer-events: none;
+        }
+
+        /* SVG Alternative boxes */
+        .alt-box {
+            cursor: pointer;
+            pointer-events: all;
+            transition: all 0.15s ease;
+        }
+
+        .alt-box:hover rect {
+            stroke: #e9411b;
+            stroke-opacity: 0.8;
+            fill: #fff5f3;
+        }
+
+        .alt-similarity-badge {
+            font-size: 10px;
+            fill: #666;
+            font-weight: 500;
+        }
+
+        .alt-similarity-rect {
+            fill: #f0f0f0;
+            stroke: #ddd;
+            stroke-width: 1;
+        }
+
+        /* Words with alternatives - darker border */
+        .word-box.has-alternatives rect {
+            stroke: #000;
+            stroke-opacity: 0.4;
+        }
+
+        .word-box.has-alternatives:hover rect {
+            stroke: #e9411b;
+            stroke-opacity: 0.6;
+        }
+
+        /* Processing words - pulsing orange border */
+        .word-box.processing rect {
+            stroke: #e9411b;
+            stroke-opacity: 0.6;
+            animation: processingPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes processingPulse {
+            0%, 100% {
+                stroke-opacity: 0.3;
+                stroke-width: 1;
+            }
+            50% {
+                stroke-opacity: 0.8;
+                stroke-width: 2;
+            }
+        }
+
+        /* Instructions */
+        #instructions {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #999;
+            font-size: 16px;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+            z-index: 5;
+        }
+
+        #instructions.hidden {
+            opacity: 0;
+        }
+
+        .esc-hint {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: #999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .esc-hint.visible {
+            opacity: 1;
+        }
+
+        /* Copy button */
+        #copy-button {
+            position: fixed;
+            bottom: 20px;
+            right: 30px;
+            background: #e9411b;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-family: 'GT America', -apple-system, sans-serif;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(233, 65, 27, 0.3);
+            pointer-events: none;
+        }
+
+        #copy-button.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        #copy-button:hover {
+            background: #d63a17;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(233, 65, 27, 0.4);
+        }
+
+        #copy-button:active {
+            transform: translateY(0);
+        }
+
+        #copy-button.copied {
+            background: #28a745;
+        }
+
+        /* Microphone button */
+        #mic-button {
+            position: fixed;
+            bottom: 20px;
+            right: 180px;
+            width: 56px;
+            height: 56px;
+            background: #333;
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            opacity: 1;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #mic-button:hover {
+            background: #444;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        #mic-button.recording {
+            background: #e9411b;
+            animation: recordingPulse 1.5s ease-in-out infinite;
+        }
+
+        #mic-button.not-supported {
+            background: #999;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        @keyframes recordingPulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 2px 8px rgba(233, 65, 27, 0.3);
+            }
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 4px 16px rgba(233, 65, 27, 0.6);
+            }
+        }
+
+        /* Recording status indicator */
+        #recording-status {
+            position: fixed;
+            bottom: 90px;
+            right: 180px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        #recording-status.visible {
+            opacity: 1;
+        }
     </style>
-  </head>
-  <body>
-    <!-- EmbeddingGemma Loading Section -->
-    <div class="input-controls">
-      <h2>🤖 EmbeddingGemma Model Loading</h2>
-      
-      <div id="embedding-status" class="status-message status-info">
-        🔄 Auto-loading EmbeddingGemma (308M parameters, ~160MB download)...
-      </div>
-      
-      <div id="loading-progress-container" class="progress-container">
-        <div id="loading-progress-bar" class="progress-bar">
-          <span id="loading-progress-text" class="progress-text">Starting...</span>
-        </div>
-      </div>
-      <div id="loading-details" style="font-size: 12px; color: #666; text-align: center; margin-top: 8px;">
-        Initializing EmbeddingGemma for automatic loading...
-      </div>
-      
-      <div class="control-buttons">
-        <button class="btn btn-secondary" id="unload-embedding-btn" style="display: none;">
-          🗑️ Unload Model
-        </button>
-      </div>
+</head>
+<body>
+    <!-- Toggle Buttons -->
+    <button class="toggle-btn muvera-toggle-btn" onclick="toggleMuVeRa()">
+        🔄 MuVeRa Search
+    </button>
+    <button class="toggle-btn rag-toggle-btn" onclick="toggleRAGDemo()">
+        🤖 RAG Pipeline
+    </button>
+
+    <!-- MuVeRa Container (slides in from right) -->
+    <div id="muvera-container" class="slide-container">
+        <iframe id="muvera-iframe" data-src="muvera.html"></iframe>
     </div>
 
-    <!-- Document Processing Section -->
-    <div class="input-controls" id="document-processing-section" style="display: none;">
-      <h2>📄 Document Collection Processing</h2>
-      
-      <div class="input-row">
-        <div class="input-group">
-          <label for="document-files">📁 Upload Text Files (optional):</label>
-          <input 
-            type="file" 
-            id="document-files" 
-            multiple 
-            accept=".txt,.md"
-          />
-          <small style="color: #666; margin-top: 5px; display: block;">
-            Select .txt or .md files. Each file will be treated as one document.
-          </small>
-        </div>
-        
-        <div class="input-group">
-          <label>📊 Quick Options:</label>
-          <div class="control-buttons">
-            <button class="btn btn-secondary" id="load-default-docs-btn" style="font-size: 12px; padding: 8px 16px;">
-              📚 Load Default Documents
-            </button>
-            <button class="btn btn-secondary" id="clear-all-docs-btn" style="font-size: 12px; padding: 8px 16px;">
-              🗑️ Clear All
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      <div id="file-status" class="status-message status-success" style="display: none;">
-        No files selected
-      </div>
-      
-      <div class="input-group">
-        <label for="document-collection">Document Collection (one document per line):</label>
-        <textarea 
-          id="document-collection" 
-          rows="8" 
-          placeholder="Enter your documents here, one per line, or upload text files above..."
-        ></textarea>
-      </div>
-      
-      <div id="embedding-progress-container" style="display: none;">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #333;">🔄 Generating Embeddings</h3>
-        <div class="progress-container">
-          <div id="embedding-progress-bar" class="progress-bar">
-            <span id="embedding-progress-text" class="progress-text">0/0 documents</span>
-          </div>
-        </div>
-        <div id="embedding-details" style="font-size: 12px; color: #666; text-align: center; margin-top: 8px;">
-          Processing documents...
-        </div>
-      </div>
-      
-      <div class="control-buttons">
-        <button class="btn btn-primary" id="process-documents-btn">
-          🚀 Process Documents & Generate Embeddings
-        </button>
-        <button class="btn btn-secondary" id="clear-documents-btn">
-          🗑️ Clear Documents
-        </button>
-        <button class="btn btn-primary" id="update-visualization-btn" style="display: none;">
-          🎯 Update Visualization
-        </button>
-      </div>
-      
-      <div id="processed-status" class="status-message status-success" style="display: none;">
-        📊 Ready: 0 documents processed with 768D embeddings
-      </div>
+    <!-- RAG Demo Container (slides in from right) -->
+    <div id="rag-demo-container" class="slide-container">
+        <iframe id="rag-iframe" data-src="rag-demo.html"></iframe>
     </div>
 
-    <!-- Query Processing Section -->
-    <div class="input-controls" id="query-processing-section" style="display: none;">
-      <h2>🔍 Query Processing & Similarity Search</h2>
-      
-      <div class="input-row">
-        <div class="input-group">
-          <label for="search-query">Search Query:</label>
-          <input 
-            type="text" 
-            id="search-query" 
-            placeholder="What is the height of Mount Everest?"
-            value="What is the height of Mount Everest?"
-          />
+    <div id="app">
+        <!-- Loading overlay -->
+        <div id="loading-overlay" :class="{ hidden: corpusReady }">
+            <div class="loading-message">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Loading 147,480 words...</div>
+                <div class="loading-text" style="margin-top: 8px; font-size: 12px; color: #999;">
+                    Please wait, interaction will be enabled shortly
+                </div>
+            </div>
         </div>
-        
-        <div class="input-group">
-          <label for="top-k-results">Top K Results:</label>
-          <select id="top-k-results">
-            <option value="3">Top 3 Results</option>
-            <option value="5">Top 5 Results</option>
-            <option value="10">Top 10 Results</option>
-          </select>
+
+        <div id="instructions" :class="{ hidden: words.length > 0 }">
+            Type or paste text to begin...
         </div>
-      </div>
-      
-      <div class="control-buttons">
-        <button class="btn btn-primary" id="search-documents-btn">
-          🔍 Search Documents
+
+        <input
+            type="text"
+            id="text-input"
+            :class="{ ready: corpusReady, 'has-words': words.length > 0 }"
+            :style="{ pointerEvents: words.length > 0 ? 'none' : 'all' }"
+            placeholder="Start typing..."
+            autofocus
+            v-model="inputText"
+            @keydown="handleKeydown"
+            @paste="handlePaste"
+        />
+
+        <div id="svg-container">
+            <svg id="main-svg"></svg>
+        </div>
+
+        <div class="esc-hint" :class="{ visible: words.length > 0 }">
+            Press ESC to clear
+        </div>
+
+        <button
+            id="copy-button"
+            :class="{ visible: words.length > 0, copied: copySuccess }"
+            @click="copyText"
+        >
+            {{ copySuccess ? '✓ Copied!' : 'Copy Text' }}
         </button>
-      </div>
-      
-      <div id="search-results-container" style="display: none; margin-top: 20px;">
-        <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">🎯 Search Results</h3>
-        <div id="search-results" style="max-height: 300px; overflow-y: auto;"></div>
-      </div>
+
+        <button
+            id="mic-button"
+            :class="{ recording: isRecording, 'not-supported': !speechSupported }"
+            @click="toggleRecording"
+            :title="speechSupported ? (isRecording ? 'Stop Recording' : 'Start Voice Input') : 'Speech Recognition Not Supported'"
+        >
+            {{ isRecording ? '⏹' : '🎤' }}
+        </button>
+
+        <div id="recording-status" :class="{ visible: isRecording }">
+            {{ recordingStatus }}
+        </div>
     </div>
 
-    <!-- Basic Input Controls Section -->
-    <div class="input-controls" id="basic-input-section" style="display: none;">
-      <h2>🔍 Basic Query & Document Input</h2>
-      
-      <div class="input-row">
-        <div class="input-group">
-          <label for="query-input">Query Text:</label>
-          <input 
-            type="text" 
-            id="query-input" 
-            placeholder="What is the height of Mount Everest?"
-            value="What is the height of Mount Everest?"
-          />
-        </div>
-        
-        <div class="input-group">
-          <label for="document-input">Document Text:</label>
-          <input 
-            type="text" 
-            id="document-input" 
-            placeholder="Mount Everest is 8,848 meters high."
-            value="Mount Everest is 8,848 meters high."
-          />
-        </div>
-      </div>
-      
-      <div class="control-buttons">
-        <button class="btn btn-secondary" id="reset-btn">
-          🔄 Reset to Defaults
-        </button>
-        <button class="btn btn-secondary" id="random-btn">
-          🎲 Try Random Examples
-        </button>
-      </div>
-    </div>
+    <!-- Vue.js 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- D3.js CDN -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
 
-    <!-- Main Animation Section -->
-    <div class="animation-container">
-      <h1>MuVeRa FDE Construction - Query vs Document + EmbeddingGemma</h1>
-      
-      <!-- Mathematical Calculations Section (Collapsible) -->
-      <div class="calculations-section">
-        <h2 id="calculations-header" onclick="toggleCalculations()">
-          🧮 Live Mathematical Calculations <span id="calculations-toggle">▼</span>
-        </h2>
-        
-        <div class="calculations-grid" id="calculations-content" style="display: none;">
-          <!-- Query Calculations -->
-          <div class="calculation-panel">
-            <h3>📊 Query Processing (SUM Aggregation)</h3>
-            <div class="calc-stage">
-              <h4>Step 1: Multi-Vector Input</h4>
-              <div id="query-input-calcs" class="math-display">Loading...</div>
-            </div>
-            <div class="calc-stage">
-              <h4>Step 2: FDE Transformation</h4>
-              <div id="query-fde-calcs" class="math-display">Loading...</div>
-            </div>
-            <div class="calc-stage">
-              <h4>Step 3: Vector Aggregation</h4>
-              <div id="query-aggregation-calcs" class="math-display">Loading...</div>
-            </div>
-          </div>
-          
-          <!-- Document Calculations -->
-          <div class="calculation-panel">
-            <h3>📈 Document Processing (AVERAGE Aggregation)</h3>
-            <div class="calc-stage">
-              <h4>Step 1: Multi-Vector Input</h4>
-              <div id="doc-input-calcs" class="math-display">Loading...</div>
-            </div>
-            <div class="calc-stage">
-              <h4>Step 2: FDE Transformation</h4>
-              <div id="doc-fde-calcs" class="math-display">Loading...</div>
-            </div>
-            <div class="calc-stage">
-              <h4>Step 3: Vector Aggregation</h4>
-              <div id="doc-aggregation-calcs" class="math-display">Loading...</div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Performance Metrics -->
-        <div style="background: #e8f5e8; border: 2px solid #4caf50; border-radius: 6px; padding: 20px; margin-top: 20px;">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2e7d32;">⚡ Performance Metrics</h3>
-          <div id="performance-metrics" class="math-display">Loading performance data...</div>
-        </div>
-      </div>
-      
-      <!-- Side-by-side layout -->
-      <div class="side-by-side-container">
-        <!-- Query Processing (Left Side) -->
-        <div class="processing-side">
-          <h2 class="processing-title">🔍 Query FDE Construction</h2>
-          
-          <div class="processing-visualization">
-            <div class="semantic-space">
-              <svg id="semantic-svg"></svg>
-              <div class="query-text" id="query-text"></div>
-            </div>
-            
-            <div class="fde-panel">
-              <h3>Semantic Space Dimension</h3>
-              <svg id="fde-svg"></svg>
-            </div>
-          </div>
-          
-          <div class="bottom-panel">
-            <svg id="bottom-svg"></svg>
-          </div>
-        </div>
-        
-        <!-- Document Processing (Right Side) -->
-        <div class="processing-side">
-          <h2 class="processing-title">📄 Document FDE Construction</h2>
-          
-          <div class="processing-visualization">
-            <div class="semantic-space">
-              <svg id="semantic-svg-doc"></svg>
-              <div class="query-text" id="query-text-doc"></div>
-            </div>
-            
-            <div class="fde-panel">
-              <h3>Semantic Space Dimension</h3>
-              <svg id="fde-svg-doc"></svg>
-            </div>
-          </div>
-          
-          <div class="bottom-panel">
-            <svg id="bottom-svg-doc"></svg>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Comparison Panel -->
-      <div class="comparison-panel">
-        <h3>🎯 Live Comparison + EmbeddingGemma Integration</h3>
-        <div class="comparison-stats">
-          <div class="stat-item">
-            <strong>Query Method:</strong> <span id="query-method">SUM aggregation</span>
-          </div>
-          <div class="stat-item">
-            <strong>Document Method:</strong> <span id="doc-method">AVERAGE aggregation</span>
-          </div>
-          <div class="stat-item">
-            <strong>Hyperplane Angles:</strong> <span id="hyperplane-diff">Different random partitions</span>
-          </div>
-          <div class="stat-item">
-            <strong>Similarity Score:</strong> <span id="similarity-score">Computing...</span>
-          </div>
-          <div class="stat-item">
-            <strong>EmbeddingGemma:</strong> <span id="embedding-similarity">Not loaded</span>
-          </div>
-          <div class="stat-item">
-            <strong>Performance:</strong> <span id="performance-comparison">Hash vs Semantic</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="pause-overlay" id="pause-btn">⏸</div>
-    
+    <script src="minimal-search.js"></script>
+
+    <!-- Panel Toggle Scripts -->
     <script>
-      function toggleCalculations() {
-        const content = document.getElementById('calculations-content');
-        const toggle = document.getElementById('calculations-toggle');
-        
-        if (content.style.display === 'none') {
-          content.style.display = 'grid';
-          toggle.textContent = '▲';
-        } else {
-          content.style.display = 'none';
-          toggle.textContent = '▼';
+        function toggleMuVeRa() {
+            const container = document.getElementById('muvera-container');
+            const button = document.querySelector('.muvera-toggle-btn');
+            const iframe = document.getElementById('muvera-iframe');
+            const textInput = document.getElementById('text-input');
+            const ragContainer = document.getElementById('rag-demo-container');
+
+            if (container.classList.contains('visible')) {
+                // Hide MuVeRa
+                container.classList.remove('visible');
+                button.textContent = '🔄 MuVeRa Search';
+                button.style.background = 'white';
+                button.style.color = '#667eea';
+                button.style.borderColor = '#667eea';
+
+                // Blur input to prevent cursor from appearing
+                textInput.blur();
+            } else {
+                // Close RAG if open
+                if (ragContainer.classList.contains('visible')) {
+                    toggleRAGDemo();
+                }
+
+                // Lazy load iframe on first click
+                if (!iframe.src && iframe.dataset.src) {
+                    console.log('🔄 Loading MuVeRa for the first time...');
+                    iframe.src = iframe.dataset.src;
+                }
+
+                // Show MuVeRa
+                container.classList.add('visible');
+                button.textContent = '← Back to Search';
+                button.style.background = '#667eea';
+                button.style.color = 'white';
+            }
         }
-      }
+
+        function toggleRAGDemo() {
+            const container = document.getElementById('rag-demo-container');
+            const button = document.querySelector('.rag-toggle-btn');
+            const iframe = document.getElementById('rag-iframe');
+            const textInput = document.getElementById('text-input');
+            const muveraContainer = document.getElementById('muvera-container');
+
+            if (container.classList.contains('visible')) {
+                // Hide RAG demo
+                container.classList.remove('visible');
+                button.textContent = '🤖 RAG Pipeline';
+                button.style.background = 'white';
+                button.style.color = '#e9411b';
+
+                // Blur input to prevent cursor from appearing
+                textInput.blur();
+            } else {
+                // Close MuVeRa if open
+                if (muveraContainer.classList.contains('visible')) {
+                    toggleMuVeRa();
+                }
+
+                // Lazy load iframe on first click (avoids loading models in background)
+                if (!iframe.src && iframe.dataset.src) {
+                    console.log('🔄 Loading RAG demo for the first time...');
+                    iframe.src = iframe.dataset.src;
+                }
+
+                // Show RAG demo
+                container.classList.add('visible');
+                button.textContent = '← Back to Search';
+                button.style.background = '#e9411b';
+                button.style.color = 'white';
+            }
+        }
+
+        // ESC key to close any open panel
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const ragContainer = document.getElementById('rag-demo-container');
+                const muveraContainer = document.getElementById('muvera-container');
+
+                if (ragContainer.classList.contains('visible')) {
+                    e.stopPropagation();  // Prevent Vue app from clearing words
+                    e.preventDefault();
+                    toggleRAGDemo();
+                } else if (muveraContainer.classList.contains('visible')) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    toggleMuVeRa();
+                }
+            }
+        }, true);  // Use capture phase to intercept ESC before Vue
     </script>
-    
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+</body>
 </html>
