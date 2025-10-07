@@ -5,10 +5,16 @@
 **Wordy** is a complete browser-based semantic AI platform that combines three powerful features:
 
 1. **🔄 MuVeRa** - Multi-Vector Retrieval with Google Research's FDE algorithm
-2. **🌐 WordNet 3D** - Interactive visualization of 158K+ words in semantic space
+2. **🌐 WordNet** - Interactive word replacement with semantic search
 3. **🤖 RAG Pipeline** - Complete Retrieval-Augmented Generation with Gemma-3-270M
 
 All running 100% locally in your browser with zero API costs.
+
+## 🎬 Demo
+
+![Wordy Demo](wordy-demo.gif)
+
+*Quick demo showing: Main interface → Text input → MuVeRa panel → RAG panel → ESC to close*
 
 ---
 
