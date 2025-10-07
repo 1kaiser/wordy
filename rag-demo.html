@@ -413,14 +413,44 @@
                     }
                 }
 
+                // Poll for corpus download completion (with timeout)
+                const maxWaitTime = 120000; // 2 minutes
+                const pollInterval = 3000; // 3 seconds
+                let elapsed = 0;
+
+                while (!corpusFromCache && elapsed < maxWaitTime) {
+                    if (elapsed === 0) {
+                        log('⏳ Waiting for corpus download to complete...', 'info');
+                        log('💡 Background preloader is downloading 455MB of data. This may take 30-60 seconds.', 'info');
+                    } else {
+                        log(`⏳ Still waiting... (${Math.floor(elapsed/1000)}s elapsed)`, 'info');
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+                    // Check again
+                    if (window.parent && window.parent.corpusPreloader) {
+                        try {
+                            corpusFromCache = await window.parent.corpusPreloader.getCorpus();
+                            if (corpusFromCache && corpusFromCache.words && corpusFromCache.embeddings) {
+                                log(`✅ Corpus ready after ${Math.floor(elapsed/1000)}s!`, 'success');
+                                break;
+                            }
+                        } catch (err) {
+                            log(`⚠️ Polling error: ${err.message}`, 'warning');
+                        }
+                    }
+
+                    elapsed += pollInterval;
+                }
+
                 if (corpusFromCache && corpusFromCache.words && corpusFromCache.embeddings) {
                     log('✅ Using cached corpus from background download!', 'success');
                     state.corpus = corpusFromCache;
                 } else {
-                    // Corpus not yet downloaded - rely on background preloader
-                    log('⏳ Corpus not yet cached. Background download may still be in progress.', 'info');
-                    log('💡 Please wait a moment and try opening the RAG panel again.', 'info');
-                    throw new Error('Corpus not yet downloaded. The background preloader is downloading 455MB of data. Please wait 30-60 seconds and try again.');
+                    // Timeout
+                    log('❌ Corpus download timeout after 2 minutes', 'error');
+                    throw new Error('Corpus download timeout. Please reload the page and try again. Check your network connection.');
                 }
 
                 updateStatus('corpus-status', `✅ ${state.corpus.words.length.toLocaleString()} words loaded`, 'ready');
