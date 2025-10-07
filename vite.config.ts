@@ -1,4 +1,6 @@
 import { defineConfig } from 'vite'
+import { writeFileSync } from 'fs'
+import { join } from 'path'
 
 export default defineConfig({
   base: '/wordy/',
@@ -17,4 +19,13 @@ export default defineConfig({
   define: {
     global: 'globalThis',
   },
+  plugins: [
+    {
+      name: 'add-nojekyll',
+      closeBundle() {
+        // Create .nojekyll file to disable Jekyll on GitHub Pages
+        writeFileSync(join(__dirname, 'dist', '.nojekyll'), '')
+      }
+    }
+  ]
 })
