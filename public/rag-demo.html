@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Pipeline Demo - WordNet with Gemma 3</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #e9411b;
+        }
+
+        .status-panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            font-weight: 500;
+            color: #666;
+        }
+
+        .status-value {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .status-ready {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .status-loading {
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .status-error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .query-panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .query-input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }
+
+        .query-input:focus {
+            outline: none;
+            border-color: #e9411b;
+        }
+
+        .generate-btn {
+            background: #e9411b;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .generate-btn:hover {
+            background: #d13616;
+        }
+
+        .generate-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .results-panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #e9411b;
+        }
+
+        .retrieved-words {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .word-chip {
+            background: #f0f0f0;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .similarity-badge {
+            background: #e9411b;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .generated-text {
+            background: #f9f9f9;
+            padding: 16px;
+            border-radius: 4px;
+            border-left: 4px solid #e9411b;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #e9411b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .metric-card {
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #e9411b;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .example-queries {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .example-query {
+            background: #f0f0f0;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .example-query:hover {
+            background: #e9411b;
+            color: white;
+        }
+
+        .log-panel {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 16px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+        }
+
+        .log-time {
+            color: #858585;
+        }
+
+        .log-info {
+            color: #4ec9b0;
+        }
+
+        .log-success {
+            color: #6a9955;
+        }
+
+        .log-error {
+            color: #f48771;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 RAG Pipeline Demo - WordNet + Gemma 3</h1>
+        <p style="margin-bottom: 20px; color: #666;">Retrieval-Augmented Generation with 147,480 words</p>
+
+        <!-- Status Panel -->
+        <div class="status-panel">
+            <div class="section-title">System Status</div>
+            <div class="status-item">
+                <span class="status-label">Embedding Model</span>
+                <span class="status-value" id="embedding-status">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Corpus Data</span>
+                <span class="status-value" id="corpus-status">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Retrieval Module</span>
+                <span class="status-value" id="retrieval-status">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Generation Model (Gemma 3 270M)</span>
+                <span class="status-value" id="generation-status">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Query Panel -->
+        <div class="query-panel">
+            <div class="section-title">Ask a Question</div>
+            <input
+                type="text"
+                class="query-input"
+                id="query-input"
+                placeholder="e.g., What is the meaning of ephemeral?"
+                disabled
+            >
+            <button class="generate-btn" id="generate-btn" disabled>
+                Generate Answer
+            </button>
+
+            <div class="example-queries">
+                <div class="example-query" data-query="What is the meaning of ephemeral?">Example: ephemeral</div>
+                <div class="example-query" data-query="Explain the concept of serendipity">Example: serendipity</div>
+                <div class="example-query" data-query="What does ubiquitous mean?">Example: ubiquitous</div>
+                <div class="example-query" data-query="Tell me about the word quintessential">Example: quintessential</div>
+            </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div class="results-panel" id="results-panel" style="display: none;">
+            <div class="section-title">Retrieved Context</div>
+            <div class="retrieved-words" id="retrieved-words"></div>
+
+            <div class="section-title" style="margin-top: 20px;">Generated Answer</div>
+            <div class="generated-text" id="generated-text">Waiting for query...</div>
+
+            <!-- Metrics -->
+            <div class="metrics" id="metrics-panel" style="display: none;">
+                <div class="metric-card">
+                    <div class="metric-value" id="retrieval-time">-</div>
+                    <div class="metric-label">Retrieval Time (ms)</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="generation-time">-</div>
+                    <div class="metric-label">Generation Time (ms)</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="total-time">-</div>
+                    <div class="metric-label">Total Time (ms)</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="context-words">-</div>
+                    <div class="metric-label">Context Words</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Panel -->
+        <div class="log-panel" id="log-panel"></div>
+    </div>
+
+    <script type="module">
+        import { EmbeddingModule } from './src/rag/modules/embedding-module.js';
+        import { RetrievalModule } from './src/rag/modules/retrieval-module.js';
+        import { GenerationModule } from './src/rag/modules/generation-module.js';
+
+        // Global state
+        const state = {
+            embeddingModule: null,
+            retrievalModule: null,
+            generationModule: null,
+            corpus: null,
+            ready: false
+        };
+
+        // Logger
+        function log(message, type = 'info') {
+            const logPanel = document.getElementById('log-panel');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+
+            const timeSpan = `<span class="log-time">[${time}]</span>`;
+            const msgSpan = `<span class="log-${type}">${message}</span>`;
+            entry.innerHTML = `${timeSpan} ${msgSpan}`;
+
+            logPanel.appendChild(entry);
+            logPanel.scrollTop = logPanel.scrollHeight;
+
+            console.log(`[${time}] ${message}`);
+        }
+
+        function updateStatus(id, text, status) {
+            const el = document.getElementById(id);
+            el.textContent = text;
+            el.className = `status-value status-${status}`;
+        }
+
+        // Initialize all modules
+        async function initialize() {
+            try {
+                log('🚀 Starting RAG pipeline initialization...', 'info');
+
+                // 1. Load corpus data
+                updateStatus('corpus-status', 'Loading...', 'loading');
+                log('📦 Loading WordNet corpus metadata...', 'info');
+
+                // Load metadata (words) - from GitHub release or local fallback
+                const metadataUrl = './corpus-metadata.json';
+                const releaseMetadataUrl = 'https://github.com/1kaiser/wordy/releases/download/v1.0.0/corpus-metadata.json';
+
+                let metadataRes = await fetch(metadataUrl).catch(() => null);
+                if (!metadataRes || !metadataRes.ok) {
+                    log('📥 Downloading corpus metadata from GitHub release...', 'info');
+                    metadataRes = await fetch(releaseMetadataUrl);
+                    if (!metadataRes.ok) {
+                        throw new Error(`Failed to load corpus metadata: ${metadataRes.statusText}`);
+                    }
+                }
+                const metadata = await metadataRes.json();
+
+                log('📦 Loading 768D embeddings (433MB)...', 'info');
+                updateStatus('corpus-status', 'Loading embeddings...', 'loading');
+
+                // Load embeddings binary - from GitHub release or local fallback
+                const embeddingsUrl = './corpus-embeddings.bin';
+                const releaseEmbeddingsUrl = 'https://github.com/1kaiser/wordy/releases/download/v1.0.0/corpus-embeddings.bin';
+
+                let embeddingsRes = await fetch(embeddingsUrl).catch(() => null);
+                if (!embeddingsRes || !embeddingsRes.ok) {
+                    log('📥 Downloading corpus embeddings from GitHub release (433MB)...', 'info');
+                    embeddingsRes = await fetch(releaseEmbeddingsUrl);
+                    if (!embeddingsRes.ok) {
+                        throw new Error(`Failed to load embeddings: ${embeddingsRes.statusText}`);
+                    }
+                }
+                const embeddingsBuffer = await embeddingsRes.arrayBuffer();
+
+                state.corpus = {
+                    words: metadata.words,
+                    embeddings: new Float32Array(embeddingsBuffer)
+                };
+
+                updateStatus('corpus-status', `✅ ${state.corpus.words.length.toLocaleString()} words loaded`, 'ready');
+                log(`✅ Loaded ${state.corpus.words.length.toLocaleString()} words with 768D embeddings`, 'success');
+
+                // 2. Initialize retrieval module
+                updateStatus('retrieval-status', 'Initializing...', 'loading');
+                log('🔍 Initializing retrieval module...', 'info');
+
+                state.retrievalModule = new RetrievalModule({
+                    corpus: state.corpus,
+                    embeddingDim: 768
+                });
+
+                updateStatus('retrieval-status', '✅ Ready', 'ready');
+                log('✅ Retrieval module ready', 'success');
+
+                // 3. Initialize embedding module
+                updateStatus('embedding-status', 'Loading model...', 'loading');
+                log('🔄 Loading embedding model (paraphrase-albert-small-v2)...', 'info');
+
+                state.embeddingModule = new EmbeddingModule();
+                await state.embeddingModule.init();
+
+                updateStatus('embedding-status', '✅ Ready', 'ready');
+                log('✅ Embedding model loaded', 'success');
+
+                // 4. Initialize generation module (Gemma 3 270M)
+                updateStatus('generation-status', 'Loading model (this may take a while)...', 'loading');
+                log('🔄 Loading Gemma 3 270M model (q4 quantized)...', 'info');
+                log('⏳ First load may take 1-2 minutes to download ~70MB model...', 'info');
+
+                state.generationModule = new GenerationModule({
+                    modelId: 'onnx-community/gemma-3-270m-it-ONNX',
+                    // dtype: 'fp32' is default, auto-detects webgpu/wasm
+                    maxTokens: 128
+                });
+
+                await state.generationModule.init();
+
+                updateStatus('generation-status', '✅ Ready', 'ready');
+                log('✅ Gemma 3 270M model loaded', 'success');
+
+                // Enable UI
+                state.ready = true;
+                document.getElementById('query-input').disabled = false;
+                document.getElementById('generate-btn').disabled = false;
+
+                log('🎉 RAG pipeline fully initialized and ready!', 'success');
+
+            } catch (error) {
+                log(`❌ Initialization failed: ${error.message}`, 'error');
+                console.error('Initialization error:', error);
+
+                updateStatus('embedding-status', '❌ Error', 'error');
+                updateStatus('corpus-status', '❌ Error', 'error');
+                updateStatus('retrieval-status', '❌ Error', 'error');
+                updateStatus('generation-status', '❌ Error', 'error');
+            }
+        }
+
+        // RAG pipeline execution
+        async function executeRAG(query) {
+            if (!state.ready) {
+                log('⚠️ System not ready yet', 'error');
+                return;
+            }
+
+            try {
+                log(`\n🔍 Processing query: "${query}"`, 'info');
+
+                const resultsPanel = document.getElementById('results-panel');
+                const metricsPanel = document.getElementById('metrics-panel');
+                const generatedText = document.getElementById('generated-text');
+                const retrievedWords = document.getElementById('retrieved-words');
+
+                resultsPanel.style.display = 'block';
+                metricsPanel.style.display = 'none';
+                generatedText.innerHTML = '<div class="loading-spinner"></div> Generating answer...';
+                retrievedWords.innerHTML = '';
+
+                // Step 1: Generate embedding for query
+                log('📊 Generating query embedding...', 'info');
+                const t0 = performance.now();
+
+                const queryEmbedding = await state.embeddingModule.embed(query);
+
+                const embeddingTime = performance.now() - t0;
+                log(`✅ Embedding generated in ${embeddingTime.toFixed(1)}ms`, 'success');
+
+                // Step 2: Retrieve similar words
+                log('🔎 Retrieving similar words from corpus...', 'info');
+                const t1 = performance.now();
+
+                const retrievedContext = state.retrievalModule.search(queryEmbedding, 5);
+
+                const retrievalTime = performance.now() - t1;
+                log(`✅ Retrieved ${retrievedContext.length} words in ${retrievalTime.toFixed(1)}ms`, 'success');
+
+                // Display retrieved words
+                retrievedContext.forEach((item, idx) => {
+                    const chip = document.createElement('div');
+                    chip.className = 'word-chip';
+                    chip.innerHTML = `
+                        <span>${item.word}</span>
+                        <span class="similarity-badge">${(item.similarity * 100).toFixed(1)}%</span>
+                    `;
+                    retrievedWords.appendChild(chip);
+
+                    log(`  ${idx + 1}. ${item.word} (${(item.similarity * 100).toFixed(1)}% similar)`, 'info');
+                });
+
+                // Step 3: Generate answer with context
+                log('🤖 Generating answer with Gemma 3...', 'info');
+                const t2 = performance.now();
+
+                const systemPrompt = "You are a helpful assistant that explains words and concepts. Use the provided context words to give a clear, concise explanation.";
+
+                const answer = await state.generationModule.generateWithContext(
+                    query,
+                    retrievedContext,
+                    systemPrompt
+                );
+
+                const generationTime = performance.now() - t2;
+                const totalTime = performance.now() - t0;
+
+                log(`✅ Answer generated in ${generationTime.toFixed(1)}ms`, 'success');
+                log(`⏱️ Total pipeline time: ${totalTime.toFixed(1)}ms`, 'success');
+
+                // Display results
+                generatedText.textContent = answer;
+
+                // Show metrics
+                document.getElementById('retrieval-time').textContent = retrievalTime.toFixed(0);
+                document.getElementById('generation-time').textContent = generationTime.toFixed(0);
+                document.getElementById('total-time').textContent = totalTime.toFixed(0);
+                document.getElementById('context-words').textContent = retrievedContext.length;
+                metricsPanel.style.display = 'grid';
+
+            } catch (error) {
+                log(`❌ RAG execution failed: ${error.message}`, 'error');
+                console.error('RAG error:', error);
+
+                document.getElementById('generated-text').textContent =
+                    `Error: ${error.message}\n\nPlease check the console for details.`;
+            }
+        }
+
+        // Event listeners
+        document.getElementById('generate-btn').addEventListener('click', () => {
+            const query = document.getElementById('query-input').value.trim();
+            if (query) {
+                executeRAG(query);
+            }
+        });
+
+        document.getElementById('query-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const query = e.target.value.trim();
+                if (query) {
+                    executeRAG(query);
+                }
+            }
+        });
+
+        // Example query clicks
+        document.querySelectorAll('.example-query').forEach(el => {
+            el.addEventListener('click', () => {
+                const query = el.getAttribute('data-query');
+                document.getElementById('query-input').value = query;
+                executeRAG(query);
+            });
+        });
+
+        // Start initialization
+        initialize();
+    </script>
+</body>
+</html>
