@@ -44,7 +44,9 @@ let isLoading = false;
 // WebGPU availability check
 async function checkWebGPUAvailability(): Promise<boolean> {
   try {
+    // @ts-ignore - WebGPU types not available in standard TypeScript
     if (!navigator.gpu) return false;
+    // @ts-ignore - WebGPU types not available in standard TypeScript
     return !!(await navigator.gpu.requestAdapter());
   } catch (error) {
     console.error('Error checking WebGPU availability:', error);
