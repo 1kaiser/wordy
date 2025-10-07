@@ -77,6 +77,13 @@ createApp({
                 console.log(`✅ Loaded ${metadata.words.length} words - Ready!`);
             } catch (error) {
                 console.error('❌ Error loading corpus:', error);
+                // Still enable interaction even if corpus fails to load
+                this.corpusReady = true;
+
+                // Focus input when ready
+                setTimeout(() => {
+                    document.getElementById('text-input').focus();
+                }, 300);
             }
         },
 
