@@ -91,9 +91,9 @@ class CorpusPreloader {
         this.isDownloading = true;
 
         try {
-            // Download metadata (22MB)
+            // Download metadata (22MB) from GitHub Pages
             console.log('📥 Downloading corpus metadata (22MB)...');
-            const metadataUrl = 'https://github.com/1kaiser/wordy/releases/download/v1.0.0/corpus-metadata.json';
+            const metadataUrl = 'https://1kaiser.github.io/wordy/corpus-metadata.json';
             const metadataRes = await fetch(metadataUrl);
 
             if (!metadataRes.ok) {
@@ -104,9 +104,9 @@ class CorpusPreloader {
             await this.putToDB('metadata', metadata);
             console.log(`✅ Metadata cached: ${metadata.words.length.toLocaleString()} words`);
 
-            // Download embeddings (433MB) with progress tracking
+            // Download embeddings (433MB) with progress tracking from GitHub Pages
             console.log('📥 Downloading corpus embeddings (433MB)... This may take a few minutes');
-            const embeddingsUrl = 'https://github.com/1kaiser/wordy/releases/download/v1.0.0/corpus-embeddings.bin';
+            const embeddingsUrl = 'https://1kaiser.github.io/wordy/corpus-embeddings.bin';
 
             const embeddingsRes = await fetch(embeddingsUrl);
 
