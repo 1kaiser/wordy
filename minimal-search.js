@@ -509,6 +509,12 @@ createApp({
         },
 
         async searchWord(word) {
+            // Guard: Check if corpus is loaded
+            if (!this.corpusData || !this.corpusData.words || !this.corpusData.embeddings) {
+                console.warn('⚠️ Corpus not loaded, cannot search for:', word);
+                return [];
+            }
+
             if (this.searchCache.has(word)) {
                 return this.searchCache.get(word);
             }
