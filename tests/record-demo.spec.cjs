@@ -1,75 +1,60 @@
 const { test } = require('@playwright/test');
 
-test('Record demo screenshots for GIF', async ({ browser }) => {
-  test.setTimeout(300000); // 5 minutes for complete demo
+test.describe('Wordy Demo Recording', () => {
+    test('Record complete workflow', async ({ browser }) => {
+        test.setTimeout(180000); // 3 minutes
 
-  const context = await browser.newContext({
-    viewport: { width: 1920, height: 1080 },
-    ignoreHTTPSErrors: true
-  });
-  const page = await context.newPage();
+        const context = await browser.newContext({
+            viewport: { width: 1920, height: 1080 },
+            recordVideo: {
+                dir: 'demo-videos/',
+                size: { width: 1920, height: 1080 }
+            }
+        });
 
-  console.log('🎬 Recording Wordy demo...\n');
+        const page = await context.newPage();
 
-  // Step 1: Load main page
-  console.log('📸 Step 1: Loading main page...');
-  await page.goto('http://localhost:3004/wordy/', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(3000);
-  await page.screenshot({ path: 'demo-screenshots/01-initial-load.png', fullPage: false });
+        console.log('\n🎬 Recording Wordy demo...\n');
 
-  // Step 2: Type text input
-  console.log('📸 Step 2: Typing in text box...');
-  const textInput = page.locator('#text-input');
-  await textInput.fill('quantum computing breakthrough');
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: 'demo-screenshots/02-text-input.png', fullPage: false });
+        // Load page
+        await page.goto('https://1kaiser.github.io/wordy/', {
+            waitUntil: 'domcontentloaded',
+            timeout: 60000
+        });
 
-  // Step 3: Show word visualization
-  console.log('📸 Step 3: Word visualization...');
-  await page.waitForTimeout(2000);
-  await page.screenshot({ path: 'demo-screenshots/03-word-boxes.png', fullPage: false });
+        await page.waitForTimeout(3000);
 
-  // Step 4: Open MuVeRa panel
-  console.log('📸 Step 4: Opening MuVeRa panel...');
-  await page.click('.muvera-toggle-btn');
-  await page.waitForTimeout(2000);
-  await page.screenshot({ path: 'demo-screenshots/04-muvera-panel-open.png', fullPage: false });
+        // Scene 1: Type in main interface
+        console.log('📍 Scene 1: Minimal Search\n');
+        await page.click('#text-input');
+        await page.type('#text-input', 'artificial', { delay: 120 });
+        await page.waitForTimeout(3000);
 
-  // Step 5: MuVeRa panel loaded
-  console.log('📸 Step 5: MuVeRa panel loaded...');
-  await page.waitForTimeout(3000);
-  await page.screenshot({ path: 'demo-screenshots/05-muvera-panel-loaded.png', fullPage: false });
+        await page.fill('#text-input', '');
+        await page.type('#text-input', 'ephemeral', { delay: 150 });
+        await page.waitForTimeout(4000);
 
-  // Step 6: Close MuVeRa (ESC key)
-  console.log('📸 Step 6: Closing MuVeRa with ESC...');
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: 'demo-screenshots/06-muvera-closed.png', fullPage: false });
+        // Scene 2: MuVeRa panel
+        console.log('📍 Scene 2: MuVeRa Panel\n');
+        await page.click('.muvera-toggle-btn');
+        await page.waitForTimeout(8000);
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(2000);
 
-  // Step 7: Open RAG panel
-  console.log('📸 Step 7: Opening RAG panel...');
-  await page.click('.rag-toggle-btn');
-  await page.waitForTimeout(2000);
-  await page.screenshot({ path: 'demo-screenshots/07-rag-panel-open.png', fullPage: false });
+        // Scene 3: RAG panel
+        console.log('📍 Scene 3: RAG Panel\n');
+        await page.click('.rag-toggle-btn');
+        await page.waitForTimeout(35000); // Show polling
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(2000);
 
-  // Step 8: RAG panel loading
-  console.log('📸 Step 8: RAG panel loading models...');
-  await page.waitForTimeout(5000);
-  await page.screenshot({ path: 'demo-screenshots/08-rag-panel-loading.png', fullPage: false });
+        // Scene 4: Back to main
+        console.log('📍 Scene 4: Final Search\n');
+        await page.fill('#text-input', '');
+        await page.type('#text-input', 'serendipity', { delay: 130 });
+        await page.waitForTimeout(3000);
 
-  // Step 9: Close RAG (ESC key)
-  console.log('📸 Step 9: Closing RAG with ESC...');
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: 'demo-screenshots/09-rag-closed.png', fullPage: false });
-
-  // Step 10: Final state
-  console.log('📸 Step 10: Back to main interface...');
-  await page.waitForTimeout(1000);
-  await page.screenshot({ path: 'demo-screenshots/10-final-state.png', fullPage: false });
-
-  console.log('\n✅ Demo screenshots recorded!');
-  console.log('📂 Saved to demo-screenshots/ directory\n');
-
-  await context.close();
+        console.log('✅ Demo complete!\n');
+        await context.close();
+    });
 });

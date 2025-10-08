@@ -72,6 +72,7 @@
 - ✅ **Embedding**: EmbeddingGemma 300M model
 - ✅ **Generation**: Gemma-3-270M-it model (~70MB)
 - ✅ **Background Preloader**: Corpus downloads while you explore
+- ✅ **Smart Polling**: Automatically waits for corpus download (polls every 3s, up to 2 min)
 - ✅ **Browser Caching**: IndexedDB persistence (offline-ready after first download)
 
 **Performance**:
@@ -346,10 +347,11 @@ MIT License - see LICENSE file for details
 
 ## 🐛 Troubleshooting
 
-### RAG Panel Shows "Corpus not yet downloaded"
-- **Cause**: Background preloader still downloading (455MB)
-- **Solution**: Wait 30-60 seconds, then reopen RAG panel
-- **Check**: Open browser console to see download progress
+### RAG Panel Shows "Waiting for corpus download"
+- **What's happening**: Background preloader is downloading 455MB corpus
+- **Expected behavior**: RAG panel automatically polls every 3 seconds and continues when ready
+- **Timeline**: Typically completes in 30-60 seconds on first visit
+- **Check**: Open browser console to see download progress (updates every 10%)
 
 ### WebGPU Errors in Console
 - **Cause**: Browser doesn't support WebGPU
