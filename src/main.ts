@@ -1009,8 +1009,7 @@ class MuVeRaAnimation {
       .attr('r', 0)
       .style('fill', color)
       .style('opacity', 0.7)
-      .transition()
-      .duration(1000)
+      .transition(d3.transition().duration(1000))
       .attr('r', 15);
     
     // Add token text
@@ -1023,9 +1022,7 @@ class MuVeRaAnimation {
       .style('fill', 'white')
       .style('opacity', 0)
       .text(word.substring(0, 3))
-      .transition()
-      .delay(500)
-      .duration(500)
+      .transition(d3.transition().delay(500).duration(500))
       .style('opacity', 1);
   }
 }
