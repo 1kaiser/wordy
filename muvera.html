@@ -1,747 +1,319 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MuVeRa FDE Construction + EmbeddingGemma</title>
-    <script src="https://d3js.org/d3.v5.min.js"></script>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&display=swap');
-      
-      body {
-        font-family: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        margin: 0;
-        padding: 40px;
-        background: #fafafa;
-        color: #333;
-      }
-      
-      /* Full width containers */
-      .animation-container {
-        width: 100%;
-        margin: 0 0 40px 0;
-        background: white;
-        padding: 20px;
-        border: 2px solid #e0e0e0;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MUVERA FDE Multi-Vector Retrieval &amp; Embedding Visualizer</title>
+  <link rel="icon" href="data:,">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 20px 24px 40px;
+      background: #f8fafc;
+      color: #0f172a;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    nav.topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 13px;
+    }
+    nav.topbar a { color: #2563eb; text-decoration: none; font-weight: 600; }
+    nav.topbar a.muted { color: #475569; font-weight: 500; }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px 20px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    h1 { font-size: 20px; margin: 0 0 4px 0; }
+    h2 { font-size: 16px; margin: 0 0 10px 0; color: #0f172a; }
+    h3 { font-size: 14px; margin: 0 0 8px 0; color: #1e293b; }
+    .sub { font-size: 12px; color: #64748b; }
 
-      .input-controls {
-        width: 100%;
-        margin: 0 0 20px 0;
-        background: white;
-        padding: 20px;
-        border: 2px solid #e0e0e0;
-      }
+    .status-banner {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1d4ed8;
+    }
+    .status-banner.ready { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+    .status-banner.error { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 
-      h1, h2 {
-        font-family: 'Google Sans', sans-serif;
-        text-align: center;
-        color: #333;
-      }
+    .progress-track { width: 100%; height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 8px; }
+    .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #2563eb, #10b981); transition: width 0.2s; }
 
-      h1 {
-        font-size: 28px;
-        font-weight: 400;
-        margin: 0 0 30px 0;
-      }
+    .param-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .pair-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 12px;
+    }
+    @media (max-width: 860px) { .pair-grid, .viz-split, .calcs-grid { grid-template-columns: 1fr !important; } }
 
-      h2 {
-        font-size: 20px;
-        font-weight: 500;
-        margin: 0 0 25px 0;
-      }
+    label.lbl { display: block; font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 4px; }
+    input.ctrl, select.ctrl, textarea.ctrl {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+    .btn {
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #0f172a;
+      cursor: pointer;
+    }
+    .btn:hover { background: #e2e8f0; }
+    .btn-primary { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-      /* Input controls */
-      .input-group {
-        margin-bottom: 20px;
-      }
+    .viz-split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .side-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; }
+    .svg-frame { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; width: 100%; overflow-x: auto; padding: 6px; margin-bottom: 10px; }
+    svg.vis-svg { display: block; margin: 0 auto; }
 
-      .input-group label {
-        display: block;
-        margin-bottom: 8px;
-        font-weight: 500;
-        color: #333;
-        font-family: 'Google Sans', sans-serif;
-      }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+    .stat-card { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+    .stat-card strong { display: block; font-size: 11px; color: #1e40af; text-transform: uppercase; letter-spacing: 0.04em; }
 
-      .input-group input, .input-group textarea, .input-group select {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e0e0e0;
-        font-family: 'Google Sans', sans-serif;
-        font-size: 14px;
-        transition: border-color 0.2s;
-      }
+    .calcs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; }
+    .calc-stage { background: #f8fafc; border-left: 3px solid #2563eb; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; }
+    .calc-stage h4 { margin: 0 0 6px 0; font-size: 13px; color: #1e40af; }
+    .math-display {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px 10px;
+      white-space: pre-wrap;
+      color: #0f172a;
+    }
+    table.bench-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
+    table.bench-table th, table.bench-table td { border: 1px solid #e2e8f0; padding: 7px 10px; text-align: left; }
+    table.bench-table th { background: #f1f5f9; font-weight: 700; }
+    table.bench-table tr.top-hit { background: #ecfdf5; }
 
-      .input-group input:focus, .input-group textarea:focus, .input-group select:focus {
-        outline: none;
-        border-color: #4285f4;
-      }
+    footer {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 12px;
+      color: #475569;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topbar">
+    <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: center;">
+      <a href="https://1kaiser.github.io/">&larr; 1kaiser.github.io</a>
+      <a class="muted" href="./index.html">&larr; Wordy Explorer</a>
+      <a class="muted" href="./rag-demo.html">RAG Pipeline</a>
+    </div>
+    <a class="muted" href="https://github.com/1kaiser/wordy" target="_blank" rel="noopener">GitHub</a>
+  </nav>
 
-      .input-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-      }
+  <section class="card">
+    <h1>MUVERA Fixed Dimensional Encodings (FDE) &amp; Multi-Vector Retrieval</h1>
+    <p class="sub" style="margin: 0 0 10px 0;">
+      Shared-hyperplane Gray-code SimHash partitioning transforms variable-length token point clouds Q and P into fixed-dimension single vectors F<sub>q</sub> (SUM) and F<sub>d</sub> (AVERAGE + empty-bucket fill) so (1/R)&langle;F<sub>q</sub>, F<sub>d</sub>&rangle; &approx; Chamfer(Q, P).
+    </p>
+    <div id="embedding-status" class="status-banner">Initializing deterministic FDE baseline...</div>
+    <div id="loading-progress-container" class="progress-track" style="display: none;">
+      <div id="loading-progress-bar" class="progress-bar"></div>
+    </div>
 
-      .control-buttons {
-        display: flex;
-        gap: 15px;
-        justify-content: center;
-        margin-top: 20px;
-      }
-
-      .btn {
-        padding: 12px 24px;
-        border: 2px solid transparent;
-        font-family: 'Google Sans', sans-serif;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-
-      .btn-primary {
-        background: #4285f4;
-        color: white;
-        border-color: #4285f4;
-      }
-
-      .btn-primary:hover {
-        background: #3367d6;
-        border-color: #3367d6;
-      }
-
-      .btn-secondary {
-        background: #f8f9fa;
-        color: #333;
-        border-color: #dadce0;
-      }
-
-      .btn-secondary:hover {
-        background: #e8eaed;
-        border-color: #bbb;
-      }
-
-      /* Mathematical Calculations Section */
-      .calculations-section {
-        background: #f8f9fa;
-        border: 2px solid #e9ecef;
-        border-radius: 8px;
-        padding: 25px;
-        margin-bottom: 30px;
-      }
-
-      #calculations-header {
-        cursor: pointer;
-        user-select: none;
-        padding: 8px;
-        transition: background-color 0.2s;
-      }
-
-      #calculations-header:hover {
-        background-color: #f5f5f5;
-        border-radius: 4px;
-      }
-
-      #calculations-toggle {
-        font-size: 16px;
-        margin-left: 8px;
-        transition: transform 0.2s ease;
-      }
-
-      .calculations-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 25px;
-        margin-bottom: 25px;
-      }
-
-      .calculation-panel {
-        background: white;
-        border: 2px solid #dadce0;
-        border-radius: 6px;
-        padding: 20px;
-      }
-
-      .calculation-panel h3 {
-        margin: 0 0 15px 0;
-        font-size: 16px;
-        font-weight: 600;
-        color: #333;
-        font-family: 'Google Sans', sans-serif;
-        border-bottom: 2px solid #e0e0e0;
-        padding-bottom: 8px;
-      }
-
-      .calc-stage {
-        margin-bottom: 15px;
-        padding: 12px;
-        background: #f8f9fa;
-        border-radius: 4px;
-        border-left: 4px solid #4285f4;
-      }
-
-      .calc-stage h4 {
-        margin: 0 0 8px 0;
-        font-size: 14px;
-        font-weight: 500;
-        color: #4285f4;
-        font-family: 'Google Sans', sans-serif;
-      }
-
-      .math-display {
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-        background: white;
-        padding: 10px;
-        border: 1px solid #dadce0;
-        border-radius: 4px;
-        line-height: 1.4;
-        color: #333;
-        white-space: pre-wrap;
-      }
-
-      /* Progress bars */
-      .progress-container {
-        background: #f0f0f0;
-        border-radius: 8px;
-        overflow: hidden;
-        height: 30px;
-        position: relative;
-        margin-bottom: 10px;
-      }
-
-      .progress-bar {
-        background: linear-gradient(90deg, #4285f4, #34a853);
-        height: 100%;
-        width: 0%;
-        transition: width 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .progress-text {
-        color: white;
-        font-weight: 500;
-        font-size: 12px;
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-      }
-
-      /* Status messages */
-      .status-message {
-        padding: 15px;
-        border-radius: 4px;
-        font-size: 14px;
-        text-align: center;
-        margin-bottom: 20px;
-      }
-
-      .status-info {
-        background: #e3f2fd;
-        border: 2px solid #2196f3;
-        color: #1976d2;
-      }
-
-      .status-success {
-        background: #e8f5e8;
-        border: 2px solid #4caf50;
-        color: #2e7d32;
-      }
-
-      .status-warning {
-        background: #fff3e0;
-        border: 2px solid #ff9800;
-        color: #f57c00;
-      }
-
-      /* Side-by-side layout */
-      .side-by-side-container {
-        display: flex;
-        gap: 30px;
-        align-items: flex-start;
-        margin-bottom: 30px;
-      }
-
-      .processing-side {
-        flex: 1;
-        background: #f8f9fa;
-        border: 2px solid #e9ecef;
-        border-radius: 8px;
-        padding: 20px;
-      }
-
-      .processing-title {
-        margin: 0 0 20px 0;
-        font-size: 16px;
-        font-weight: 600;
-        text-align: center;
-        color: #333;
-        font-family: 'Google Sans', sans-serif;
-        border-bottom: 2px solid #e0e0e0;
-        padding-bottom: 10px;
-      }
-
-      .processing-visualization {
-        display: flex;
-        gap: 20px;
-        align-items: flex-start;
-        margin-bottom: 20px;
-      }
-
-      .semantic-space {
-        flex: 1.2;
-      }
-
-      .fde-panel {
-        flex: 0.8;
-        background: white;
-        border: 1px solid #dadce0;
-        border-radius: 4px;
-        padding: 15px;
-      }
-
-      .fde-panel h3 {
-        margin: 0 0 15px 0;
-        font-size: 14px;
-        font-weight: 500;
-        color: #666;
-      }
-
-      #semantic-svg, #semantic-svg-doc {
-        width: 400px;
-        height: 400px;
-        background: white;
-        border: 2px solid #e0e0e0;
-      }
-
-      #fde-svg, #fde-svg-doc {
-        width: 100%;
-        height: 250px;
-        background: white;
-      }
-
-      .query-text {
-        margin-top: 20px;
-        padding: 15px;
-        background: #f5f5f5;
-        border: 1px solid #ddd;
-        font-size: 16px;
-        font-weight: 500;
-        text-align: center;
-        min-height: 20px;
-      }
-
-      .bottom-panel {
-        background: white;
-        border: 1px solid #dadce0;
-        border-radius: 4px;
-        padding: 15px;
-        min-height: 60px;
-      }
-
-      #bottom-svg, #bottom-svg-doc {
-        width: 100%;
-        height: 80px;
-        background: white;
-      }
-
-      /* Comparison panel */
-      .comparison-panel {
-        background: #e3f2fd;
-        border: 2px solid #2196f3;
-        border-radius: 8px;
-        padding: 20px;
-        margin-top: 20px;
-      }
-
-      .comparison-panel h3 {
-        margin: 0 0 15px 0;
-        font-size: 16px;
-        font-weight: 600;
-        text-align: center;
-        color: #1976d2;
-      }
-
-      .comparison-stats {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 15px;
-      }
-
-      .stat-item {
-        background: white;
-        padding: 12px;
-        border-radius: 4px;
-        border: 1px solid #bbdefb;
-        font-size: 14px;
-      }
-
-      .stat-item strong {
-        color: #1976d2;
-      }
-
-      .pause-overlay {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #333;
-        color: white;
-        padding: 10px 20px;
-        border: 2px solid #555;
-        font-size: 14px;
-        cursor: pointer;
-        z-index: 1000;
-      }
-
-      /* Responsive design */
-      @media (max-width: 1200px) {
-        .side-by-side-container {
-          flex-direction: column;
-        }
-        
-        .comparison-stats {
-          grid-template-columns: 1fr;
-        }
-        
-        .calculations-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <nav style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; font-size: 13px;">
-      <div style="display: flex; gap: 14px; flex-wrap: wrap;">
-        <a href="https://1kaiser.github.io/" style="color: #1a73e8; text-decoration: none; font-weight: 600;">&larr; 1kaiser.github.io</a>
-        <a href="./index.html" style="color: #5f6368; text-decoration: none; font-weight: 500;">&larr; Wordy Explorer</a>
-        <a href="./rag-demo.html" style="color: #5f6368; text-decoration: none; font-weight: 500;">RAG Pipeline</a>
+    <div class="param-grid">
+      <div>
+        <label class="lbl" for="muvera-model-select">Embedding Backend</label>
+        <select id="muvera-model-select" class="ctrl">
+          <option value="Xenova/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (~23 MB WASM, 384D)</option>
+          <option value="onnx-community/embeddinggemma-300m-ONNX">EmbeddingGemma-300M (~195 MB, 768D)</option>
+          <option value="deterministic">Deterministic Token Cloud (64D Instant)</option>
+        </select>
       </div>
-      <a href="https://github.com/1kaiser/wordy" target="_blank" rel="noopener" style="color: #5f6368; text-decoration: none;">GitHub</a>
-    </nav>
-    <!-- EmbeddingGemma Loading Section -->
-    <div class="input-controls">
-      <h2>🤖 EmbeddingGemma Model Loading</h2>
-      
-      <div id="embedding-status" class="status-message status-info">
-        🔄 Auto-loading EmbeddingGemma (308M parameters, ~160MB download)...
+      <div>
+        <label class="lbl" for="ksim-select">SimHash Hyperplanes (k<sub>sim</sub>)</label>
+        <select id="ksim-select" class="ctrl">
+          <option value="2">k = 2 (4 partitions)</option>
+          <option value="3" selected>k = 3 (8 partitions)</option>
+          <option value="4">k = 4 (16 partitions)</option>
+        </select>
       </div>
-      
-      <div id="loading-progress-container" class="progress-container">
-        <div id="loading-progress-bar" class="progress-bar">
-          <span id="loading-progress-text" class="progress-text">Starting...</span>
-        </div>
+      <div>
+        <label class="lbl" for="reps-select">Repetitions (R<sub>reps</sub>)</label>
+        <select id="reps-select" class="ctrl">
+          <option value="1">R = 1 repetition</option>
+          <option value="2">R = 2 repetitions</option>
+          <option value="4">R = 4 repetitions</option>
+          <option value="8" selected>R = 8 repetitions</option>
+          <option value="16">R = 16 repetitions</option>
+        </select>
       </div>
-      <div id="loading-details" style="font-size: 12px; color: #666; text-align: center; margin-top: 8px;">
-        Initializing EmbeddingGemma for automatic loading...
+      <div>
+        <label class="lbl" for="fde-seed-select">Shared Projection Seed</label>
+        <select id="fde-seed-select" class="ctrl">
+          <option value="42" selected>Seed 42</option>
+          <option value="7">Seed 7</option>
+          <option value="1337">Seed 1337</option>
+        </select>
       </div>
-      
-      <div class="control-buttons">
-        <button class="btn btn-secondary" id="unload-embedding-btn" style="display: none;">
-          🗑️ Unload Model
-        </button>
+      <div style="display: flex; align-items: flex-end; padding-bottom: 6px;">
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">
+          <input id="fill-empty-checkbox" type="checkbox" checked />
+          <span>Fill Empty Document Partitions</span>
+        </label>
       </div>
     </div>
 
-    <!-- Document Processing Section -->
-    <div class="input-controls" id="document-processing-section" style="display: none;">
-      <h2>📄 Document Collection Processing</h2>
-      
-      <div class="input-row">
-        <div class="input-group">
-          <label for="document-files">📁 Upload Text Files (optional):</label>
-          <input 
-            type="file" 
-            id="document-files" 
-            multiple 
-            accept=".txt,.md"
-          />
-          <small style="color: #666; margin-top: 5px; display: block;">
-            Select .txt or .md files. Each file will be treated as one document.
-          </small>
-        </div>
-        
-        <div class="input-group">
-          <label>📊 Quick Options:</label>
-          <div class="control-buttons">
-            <button class="btn btn-secondary" id="load-default-docs-btn" style="font-size: 12px; padding: 8px 16px;">
-              📚 Load Default Documents
-            </button>
-            <button class="btn btn-secondary" id="clear-all-docs-btn" style="font-size: 12px; padding: 8px 16px;">
-              🗑️ Clear All
-            </button>
-          </div>
-        </div>
+    <div class="pair-grid">
+      <div>
+        <label class="lbl" for="query-input">Query Text Q</label>
+        <input id="query-input" class="ctrl" type="text" value="What is the height of Mount Everest?" />
       </div>
-      
-      <div id="file-status" class="status-message status-success" style="display: none;">
-        No files selected
-      </div>
-      
-      <div class="input-group">
-        <label for="document-collection">Document Collection (one document per line):</label>
-        <textarea 
-          id="document-collection" 
-          rows="8" 
-          placeholder="Enter your documents here, one per line, or upload text files above..."
-        ></textarea>
-      </div>
-      
-      <div id="embedding-progress-container" style="display: none;">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #333;">🔄 Generating Embeddings</h3>
-        <div class="progress-container">
-          <div id="embedding-progress-bar" class="progress-bar">
-            <span id="embedding-progress-text" class="progress-text">0/0 documents</span>
-          </div>
-        </div>
-        <div id="embedding-details" style="font-size: 12px; color: #666; text-align: center; margin-top: 8px;">
-          Processing documents...
-        </div>
-      </div>
-      
-      <div class="control-buttons">
-        <button class="btn btn-primary" id="process-documents-btn">
-          🚀 Process Documents & Generate Embeddings
-        </button>
-        <button class="btn btn-secondary" id="clear-documents-btn">
-          🗑️ Clear Documents
-        </button>
-        <button class="btn btn-primary" id="update-visualization-btn" style="display: none;">
-          🎯 Update Visualization
-        </button>
-      </div>
-      
-      <div id="processed-status" class="status-message status-success" style="display: none;">
-        📊 Ready: 0 documents processed with 768D embeddings
+      <div>
+        <label class="lbl" for="document-input">Document Text P</label>
+        <input id="document-input" class="ctrl" type="text" value="Mount Everest rises 8,848 meters above sea level in the Himalayas." />
       </div>
     </div>
 
-    <!-- Query Processing Section -->
-    <div class="input-controls" id="query-processing-section" style="display: none;">
-      <h2>🔍 Query Processing & Similarity Search</h2>
-      
-      <div class="input-row">
-        <div class="input-group">
-          <label for="search-query">Search Query:</label>
-          <input 
-            type="text" 
-            id="search-query" 
-            placeholder="What is the height of Mount Everest?"
-            value="What is the height of Mount Everest?"
-          />
-        </div>
-        
-        <div class="input-group">
-          <label for="top-k-results">Top K Results:</label>
-          <select id="top-k-results">
-            <option value="3">Top 3 Results</option>
-            <option value="5">Top 5 Results</option>
-            <option value="10">Top 10 Results</option>
-          </select>
-        </div>
+    <div class="btn-row">
+      <button id="compute-pair-btn" class="btn btn-primary" type="button">Compute Shared-Partition FDE</button>
+      <button id="random-btn" class="btn" type="button">Try Preset Pair</button>
+      <button id="reset-btn" class="btn" type="button">Reset Defaults</button>
+      <button id="pause-btn" class="btn" type="button">Pause Pulse</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Live Retrieval Equivalence Metrics (Exact Chamfer vs. MUVERA FDE vs. Single-Vector)</h2>
+    <div class="stats-grid">
+      <div class="stat-card"><strong>Exact Chamfer Sum (MaxSim)</strong><span id="chamfer-score">-</span></div>
+      <div class="stat-card"><strong>MUVERA FDE Inner Product ((1/R)&langle;F<sub>q</sub>, F<sub>d</sub>&rangle;)</strong><span id="similarity-score">-</span></div>
+      <div class="stat-card"><strong>Single-Vector Cosine</strong><span id="single-vec-score">-</span></div>
+      <div class="stat-card"><strong>Shared Partitions</strong><span id="hyperplane-diff">-</span></div>
+      <div class="stat-card"><strong>Semantic Backend</strong><span id="embedding-similarity">-</span></div>
+      <div class="stat-card"><strong>Approximation Error</strong><span id="performance-comparison">-</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Query Q (SUM Partition Aggregation) vs. Document P (AVERAGE + Fill Aggregation)</h2>
+    <div class="viz-split">
+      <div class="side-box">
+        <h3>Query Cloud Q &amp; Shared SimHash Halfspaces (Repetition 1)</h3>
+        <div class="svg-frame"><svg id="semantic-svg" class="vis-svg" width="420" height="300"></svg></div>
+        <div id="query-text" class="sub" style="margin-bottom: 8px; font-weight: 600;"></div>
+        <h3>Query Partition Norms (SUM Aggregation)</h3>
+        <div class="svg-frame"><svg id="fde-svg" class="vis-svg" width="420" height="170"></svg></div>
+        <h3>Query FDE Block Heatmap F<sub>q</sub> (Repetition 1)</h3>
+        <div class="svg-frame"><svg id="bottom-svg" class="vis-svg" width="420" height="90"></svg></div>
       </div>
-      
-      <div class="control-buttons">
-        <button class="btn btn-primary" id="search-documents-btn">
-          🔍 Search Documents
-        </button>
-      </div>
-      
-      <div id="search-results-container" style="display: none; margin-top: 20px;">
-        <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">🎯 Search Results</h3>
-        <div id="search-results" style="max-height: 300px; overflow-y: auto;"></div>
+
+      <div class="side-box">
+        <h3>Document Cloud P &amp; Identical SimHash Halfspaces (Repetition 1)</h3>
+        <div class="svg-frame"><svg id="semantic-svg-doc" class="vis-svg" width="420" height="300"></svg></div>
+        <div id="query-text-doc" class="sub" style="margin-bottom: 8px; font-weight: 600;"></div>
+        <h3>Document Partition Norms (AVERAGE + Empty Fill)</h3>
+        <div class="svg-frame"><svg id="fde-svg-doc" class="vis-svg" width="420" height="170"></svg></div>
+        <h3>Document FDE Block Heatmap F<sub>d</sub> (Repetition 1)</h3>
+        <div class="svg-frame"><svg id="bottom-svg-doc" class="vis-svg" width="420" height="90"></svg></div>
       </div>
     </div>
+  </section>
 
-    <!-- Basic Input Controls Section -->
-    <div class="input-controls" id="basic-input-section" style="display: none;">
-      <h2>🔍 Basic Query & Document Input</h2>
-      
-      <div class="input-row">
-        <div class="input-group">
-          <label for="query-input">Query Text:</label>
-          <input 
-            type="text" 
-            id="query-input" 
-            placeholder="What is the height of Mount Everest?"
-            value="What is the height of Mount Everest?"
-          />
-        </div>
-        
-        <div class="input-group">
-          <label for="document-input">Document Text:</label>
-          <input 
-            type="text" 
-            id="document-input" 
-            placeholder="Mount Everest is 8,848 meters high."
-            value="Mount Everest is 8,848 meters high."
-          />
-        </div>
+  <section class="card">
+    <h2>Document Collection Multi-Vector Retrieval Benchmark</h2>
+    <p class="sub">Ranks all documents by Exact Chamfer, MUVERA FDE Single-Vector Inner Product, and Dense Sentence Cosine side-by-side.</p>
+    <div class="pair-grid">
+      <div>
+        <label class="lbl" for="search-query">Benchmark Query</label>
+        <input id="search-query" class="ctrl" type="text" value="What is the height of Mount Everest?" />
       </div>
-      
-      <div class="control-buttons">
-        <button class="btn btn-secondary" id="reset-btn">
-          🔄 Reset to Defaults
-        </button>
-        <button class="btn btn-secondary" id="random-btn">
-          🎲 Try Random Examples
-        </button>
+      <div>
+        <label class="lbl" for="top-k-results">Top K Results</label>
+        <select id="top-k-results" class="ctrl">
+          <option value="3">Top 3</option>
+          <option value="5" selected>Top 5</option>
+          <option value="10">Top 10</option>
+        </select>
       </div>
     </div>
+    <div style="margin-top: 10px;">
+      <label class="lbl" for="document-collection">Documents (one per line)</label>
+      <textarea id="document-collection" class="ctrl" rows="6"></textarea>
+    </div>
+    <div class="btn-row">
+      <button id="search-documents-btn" class="btn btn-primary" type="button">Rank Collection (Chamfer vs. MUVERA vs. Cosine)</button>
+      <button id="load-default-docs-btn" class="btn" type="button">Restore Default 10 Facts</button>
+    </div>
+    <div id="search-results"></div>
+  </section>
 
-    <!-- Main Animation Section -->
-    <div class="animation-container">
-      <h1>MuVeRa FDE Construction - Query vs Document + EmbeddingGemma</h1>
-      
-      <!-- Mathematical Calculations Section (Collapsible) -->
-      <div class="calculations-section">
-        <h2 id="calculations-header" onclick="toggleCalculations()">
-          🧮 Live Mathematical Calculations <span id="calculations-toggle">▼</span>
-        </h2>
-        
-        <div class="calculations-grid" id="calculations-content" style="display: none;">
-          <!-- Query Calculations -->
-          <div class="calculation-panel">
-            <h3>📊 Query Processing (SUM Aggregation)</h3>
-            <div class="calc-stage">
-              <h4>Step 1: Multi-Vector Input</h4>
-              <div id="query-input-calcs" class="math-display">Loading...</div>
-            </div>
-            <div class="calc-stage">
-              <h4>Step 2: FDE Transformation</h4>
-              <div id="query-fde-calcs" class="math-display">Loading...</div>
-            </div>
-            <div class="calc-stage">
-              <h4>Step 3: Vector Aggregation</h4>
-              <div id="query-aggregation-calcs" class="math-display">Loading...</div>
-            </div>
-          </div>
-          
-          <!-- Document Calculations -->
-          <div class="calculation-panel">
-            <h3>📈 Document Processing (AVERAGE Aggregation)</h3>
-            <div class="calc-stage">
-              <h4>Step 1: Multi-Vector Input</h4>
-              <div id="doc-input-calcs" class="math-display">Loading...</div>
-            </div>
-            <div class="calc-stage">
-              <h4>Step 2: FDE Transformation</h4>
-              <div id="doc-fde-calcs" class="math-display">Loading...</div>
-            </div>
-            <div class="calc-stage">
-              <h4>Step 3: Vector Aggregation</h4>
-              <div id="doc-aggregation-calcs" class="math-display">Loading...</div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Performance Metrics -->
-        <div style="background: #e8f5e8; border: 2px solid #4caf50; border-radius: 6px; padding: 20px; margin-top: 20px;">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2e7d32;">⚡ Performance Metrics</h3>
-          <div id="performance-metrics" class="math-display">Loading performance data...</div>
-        </div>
+  <section class="card">
+    <h2>Exact Mathematical Breakdown &amp; Runtime Metrics</h2>
+    <div class="calcs-grid">
+      <div>
+        <h3>Query Processing (SUM)</h3>
+        <div class="calc-stage"><h4>Step 1: Token Cloud Q</h4><div id="query-input-calcs" class="math-display">Computing...</div></div>
+        <div class="calc-stage"><h4>Step 2: Shared Gray-Code Partitioning</h4><div id="query-fde-calcs" class="math-display">Computing...</div></div>
+        <div class="calc-stage"><h4>Step 3: FDE Vector Summary</h4><div id="query-aggregation-calcs" class="math-display">Computing...</div></div>
       </div>
-      
-      <!-- Side-by-side layout -->
-      <div class="side-by-side-container">
-        <!-- Query Processing (Left Side) -->
-        <div class="processing-side">
-          <h2 class="processing-title">🔍 Query FDE Construction</h2>
-          
-          <div class="processing-visualization">
-            <div class="semantic-space">
-              <svg id="semantic-svg"></svg>
-              <div class="query-text" id="query-text"></div>
-            </div>
-            
-            <div class="fde-panel">
-              <h3>Semantic Space Dimension</h3>
-              <svg id="fde-svg"></svg>
-            </div>
-          </div>
-          
-          <div class="bottom-panel">
-            <svg id="bottom-svg"></svg>
-          </div>
-        </div>
-        
-        <!-- Document Processing (Right Side) -->
-        <div class="processing-side">
-          <h2 class="processing-title">📄 Document FDE Construction</h2>
-          
-          <div class="processing-visualization">
-            <div class="semantic-space">
-              <svg id="semantic-svg-doc"></svg>
-              <div class="query-text" id="query-text-doc"></div>
-            </div>
-            
-            <div class="fde-panel">
-              <h3>Semantic Space Dimension</h3>
-              <svg id="fde-svg-doc"></svg>
-            </div>
-          </div>
-          
-          <div class="bottom-panel">
-            <svg id="bottom-svg-doc"></svg>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Comparison Panel -->
-      <div class="comparison-panel">
-        <h3>🎯 Live Comparison + EmbeddingGemma Integration</h3>
-        <div class="comparison-stats">
-          <div class="stat-item">
-            <strong>Query Method:</strong> <span id="query-method">SUM aggregation</span>
-          </div>
-          <div class="stat-item">
-            <strong>Document Method:</strong> <span id="doc-method">AVERAGE aggregation</span>
-          </div>
-          <div class="stat-item">
-            <strong>Hyperplane Angles:</strong> <span id="hyperplane-diff">Different random partitions</span>
-          </div>
-          <div class="stat-item">
-            <strong>Similarity Score:</strong> <span id="similarity-score">Computing...</span>
-          </div>
-          <div class="stat-item">
-            <strong>EmbeddingGemma:</strong> <span id="embedding-similarity">Not loaded</span>
-          </div>
-          <div class="stat-item">
-            <strong>Performance:</strong> <span id="performance-comparison">Hash vs Semantic</span>
-          </div>
-        </div>
+      <div>
+        <h3>Document Processing (AVERAGE + Fill)</h3>
+        <div class="calc-stage"><h4>Step 1: Token Cloud P</h4><div id="doc-input-calcs" class="math-display">Computing...</div></div>
+        <div class="calc-stage"><h4>Step 2: Shared Gray-Code Partitioning</h4><div id="doc-fde-calcs" class="math-display">Computing...</div></div>
+        <div class="calc-stage"><h4>Step 3: FDE Vector Summary</h4><div id="doc-aggregation-calcs" class="math-display">Computing...</div></div>
       </div>
     </div>
-    
-    <div class="pause-overlay" id="pause-btn">⏸</div>
-    
-    <script>
-      function toggleCalculations() {
-        const content = document.getElementById('calculations-content');
-        const toggle = document.getElementById('calculations-toggle');
-        
-        if (content.style.display === 'none') {
-          content.style.display = 'grid';
-          toggle.textContent = '▲';
-        } else {
-          content.style.display = 'none';
-          toggle.textContent = '▼';
-        }
-      }
-    </script>
-    
-    <script type="module" src="/src/main.ts"></script>
+    <div class="calc-stage" style="border-left-color: #16a34a; margin-top: 8px;">
+      <h4 style="color: #166534;">Runtime &amp; Compression Summary</h4>
+      <div id="performance-metrics" class="math-display">Computing...</div>
+    </div>
+  </section>
 
-    <footer style="margin-top: 32px; padding: 16px 20px; background: #fff; border: 1px solid #e0e0e0; font-size: 12px; color: #5f6368; line-height: 1.6;">
-      <strong>References &amp; Attribution:</strong>
-      Jayaram, R., Dhulipala, L., Hadian, M., Lee, J., &amp; Mirrokni, V. (2024).
-      <em>MUVERA: Making Multi-Vector Retrieval as Fast as Single-Vector Search</em> (<a href="https://arxiv.org/abs/2405.19504" target="_blank" rel="noopener">arXiv:2405.19504</a>).
-      Semantic embeddings powered by <a href="https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX" target="_blank" rel="noopener">EmbeddingGemma-300M</a>,
-      <a href="https://huggingface.co/docs/transformers.js" target="_blank" rel="noopener">Transformers.js</a>, and <a href="https://d3js.org/" target="_blank" rel="noopener">D3.js</a>.
-      Part of <a href="https://1kaiser.github.io/">1kaiser.github.io</a>.
-    </footer>
-  </body>
+  <footer>
+    <strong>References &amp; Attribution:</strong>
+    Jayaram, R., Dhulipala, L., Hadian, M., Lee, J., &amp; Mirrokni, V. (2024).
+    <em>MUVERA: Making Multi-Vector Retrieval as Fast as Single-Vector Search</em> (<a href="https://arxiv.org/abs/2405.19504" target="_blank" rel="noopener">arXiv:2405.19504</a>).
+    Token embeddings powered by <a href="https://huggingface.co/Xenova/all-MiniLM-L6-v2" target="_blank" rel="noopener">all-MiniLM-L6-v2</a>, <a href="https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX" target="_blank" rel="noopener">EmbeddingGemma-300M</a>,
+    <a href="https://huggingface.co/docs/transformers.js" target="_blank" rel="noopener">Transformers.js 4.3.2</a>, and <a href="https://d3js.org/" target="_blank" rel="noopener">D3.js v7</a>.
+    Part of <a href="https://1kaiser.github.io/">1kaiser.github.io</a>.
+  </footer>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
 </html>

@@ -3,548 +3,481 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WordNet - Minimal Search</title>
+    <title>Wordy — WordNet 3.1 Lexical Graph, MUVERA &amp; RAG</title>
+    <link rel="icon" href="data:,">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'GT America', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            overflow: hidden;
-            height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f8fafc;
+            color: #0f172a;
+            min-height: 100vh;
             width: 100vw;
+            overflow-x: hidden;
         }
 
-        #app {
-            height: 100vh;
-            width: 100vw;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-
-        /* Loading overlay */
-        #loading-overlay {
+        .top-left-bar {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #f5f5f5;
+            top: 14px;
+            left: 16px;
+            z-index: 1001;
             display: flex;
+            gap: 8px;
             align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            transition: opacity 0.3s ease;
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(8px);
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 6px 12px;
+            font-size: 13px;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
         }
-
-        #loading-overlay.hidden {
-            opacity: 0;
-            pointer-events: none;
+        .top-left-bar a { color: #1d4ed8; font-weight: 600; text-decoration: none; }
+        .top-left-bar a.muted { color: #475569; font-weight: 500; }
+        .btn-mini {
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 4px 9px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            color: #0f172a;
         }
+        .btn-mini:hover { background: #e2e8f0; }
 
-        .loading-message {
-            text-align: center;
-        }
-
-        .loading-spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid #ddd;
-            border-top-color: #e9411b;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .loading-text {
-            font-size: 14px;
-            color: #666;
-        }
-
-        /* Toggle Buttons */
         .toggle-btn {
             position: fixed;
-            top: 20px;
+            top: 14px;
             z-index: 10000;
-            background: white;
+            background: #ffffff;
             border: 2px solid #e9411b;
             color: #e9411b;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: 999px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         }
+        .rag-toggle-btn { right: 16px; }
+        .muvera-toggle-btn { right: 170px; border-color: #4f46e5; color: #4f46e5; }
+        .rag-toggle-btn:hover { background: #e9411b; color: #fff; }
+        .muvera-toggle-btn:hover { background: #4f46e5; color: #fff; }
 
-        .rag-toggle-btn {
-            right: 20px;
-        }
-
-        .muvera-toggle-btn {
-            right: 220px;
-            border-color: #667eea;
-            color: #667eea;
-        }
-
-        .toggle-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(233, 65, 27, 0.3);
-        }
-
-        .rag-toggle-btn:hover {
-            background: #e9411b;
-            color: white;
-        }
-
-        .muvera-toggle-btn:hover {
-            background: #667eea;
-            color: white;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-        }
-
-        /* Slide-in Containers */
         .slide-container {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: white;
+            inset: 0;
+            background: #fff;
             z-index: 9998;
             overflow-y: auto;
             transform: translateX(100%);
-            transition: transform 0.5s ease;
+            transition: transform 0.35s ease;
         }
+        .slide-container.visible { transform: translateX(0); }
+        .slide-container iframe { width: 100%; height: 100%; border: none; }
 
-        .slide-container.visible {
-            transform: translateX(0);
-        }
-
-        .slide-container iframe {
+        #app {
+            min-height: 100vh;
             width: 100%;
-            height: 100%;
-            border: none;
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 76px 20px 84px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
         }
 
-        /* Blinking cursor input */
+        .hero-sub {
+            text-align: center;
+            color: #475569;
+            font-size: 13px;
+            max-width: 720px;
+        }
+        .composer-row {
+            width: 100%;
+            max-width: 760px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 6px 10px;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+        }
         #text-input {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 18px;
-            color: #000;
+            flex: 1;
+            font-size: 16px;
+            color: #0f172a;
             background: transparent;
             border: none;
             outline: none;
-            text-align: center;
-            min-width: 300px;
-            max-width: 80vw;
-            padding: 10px;
-            caret-color: #000;
-            z-index: -1;
-            transition: all 0.3s ease;
-            pointer-events: all;
+            padding: 6px 4px;
+            min-width: 120px;
         }
-
-        #text-input.ready {
-            z-index: 10;
+        .chips-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
         }
-
-        /* Hide input text when word boxes are shown, but keep cursor visible */
-        #text-input.has-words {
-            color: transparent;
-            caret-color: #e9411b; /* Bright orange cursor for visibility */
-            z-index: 100; /* Ensure cursor is above SVG elements */
-        }
-
-        #text-input::placeholder {
-            color: #999;
-            opacity: 0;
-            animation: fadePlaceholder 2s ease-in-out infinite;
-        }
-
-        @keyframes fadePlaceholder {
-            0%, 100% { opacity: 0; }
-            50% { opacity: 1; }
-        }
-
-        /* SVG container */
-        #svg-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
-
-        #main-svg {
-            width: 100%;
-            height: 100%;
-        }
-
-        /* Word boxes */
-        .word-box {
+        .chip {
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #334155;
+            padding: 5px 11px;
+            border-radius: 999px;
+            font-size: 12px;
             cursor: pointer;
-            pointer-events: all;
-            transition: all 0.2s ease;
+        }
+        .chip:hover { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+
+        .toolbar-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #475569;
+        }
+        .status-pill {
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #ecfdf5;
+            color: #047857;
+            border: 1px solid #a7f3d0;
+            font-weight: 600;
+            font-size: 11px;
         }
 
-        .word-box:hover rect {
-            stroke: #e9411b;
-            stroke-opacity: 0.5;
+        .word-boxes-strip {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 6px;
+            min-height: 56px;
         }
-
-        .word-box.selected rect {
-            stroke: #e9411b;
-            stroke-opacity: 0.8;
-        }
-
-        .word-box.disabled {
-            opacity: 0.4;
-            cursor: default;
-            pointer-events: none;
-        }
-
-        /* SVG Alternative boxes */
-        .alt-box {
+        .word-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            border: 1.5px solid #cbd5e1;
+            background: #ffffff;
+            color: #0f172a;
             cursor: pointer;
-            pointer-events: all;
             transition: all 0.15s ease;
         }
+        .word-pill.in-wordnet { border-color: #64748b; }
+        .word-pill.in-wordnet:hover { border-color: #e9411b; background: #fff7f5; }
+        .word-pill.selected { border-color: #e9411b; background: #fff1ee; color: #c22e0c; box-shadow: 0 2px 8px rgba(233, 65, 27, 0.16); }
+        .word-pill.unknown { color: #94a3b8; border-style: dashed; }
 
-        .alt-box:hover rect {
-            stroke: #e9411b;
-            stroke-opacity: 0.8;
-            fill: #fff5f3;
+        .inspector-grid {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1.15fr 1fr;
+            gap: 14px;
         }
-
-        .alt-similarity-badge {
-            font-size: 10px;
-            fill: #666;
-            font-weight: 500;
+        @media (max-width: 880px) {
+            .inspector-grid { grid-template-columns: 1fr; }
+            .muvera-toggle-btn { right: 16px; top: 56px; }
         }
-
-        .alt-similarity-rect {
-            fill: #f0f0f0;
-            stroke: #ddd;
-            stroke-width: 1;
+        .panel-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 14px 16px;
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
         }
-
-        /* Words with alternatives - darker border */
-        .word-box.has-alternatives rect {
-            stroke: #000;
-            stroke-opacity: 0.4;
-        }
-
-        .word-box.has-alternatives:hover rect {
-            stroke: #e9411b;
-            stroke-opacity: 0.6;
-        }
-
-        /* Processing words - pulsing orange border */
-        .word-box.processing rect {
-            stroke: #e9411b;
-            stroke-opacity: 0.6;
-            animation: processingPulse 1s ease-in-out infinite;
-        }
-
-        @keyframes processingPulse {
-            0%, 100% {
-                stroke-opacity: 0.3;
-                stroke-width: 1;
-            }
-            50% {
-                stroke-opacity: 0.8;
-                stroke-width: 2;
-            }
-        }
-
-        /* Instructions */
-        #instructions {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            color: #999;
-            font-size: 16px;
-            pointer-events: none;
-            opacity: 1;
-            transition: opacity 0.3s ease;
-            z-index: 5;
-        }
-
-        #instructions.hidden {
-            opacity: 0;
-        }
-
-        .esc-hint {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 12px;
-            color: #999;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .esc-hint.visible {
-            opacity: 1;
-        }
-
-        /* Copy button */
-        #copy-button {
-            position: fixed;
-            bottom: 20px;
-            right: 30px;
-            background: #e9411b;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            padding: 10px 20px;
+        .panel-card h3 {
             font-size: 14px;
-            font-family: 'GT America', -apple-system, sans-serif;
-            cursor: pointer;
-            opacity: 0;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(233, 65, 27, 0.3);
-            pointer-events: none;
-        }
-
-        #copy-button.visible {
-            opacity: 1;
-            pointer-events: all;
-        }
-
-        #copy-button:hover {
-            background: #d63a17;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(233, 65, 27, 0.4);
-        }
-
-        #copy-button:active {
-            transform: translateY(0);
-        }
-
-        #copy-button.copied {
-            background: #28a745;
-        }
-
-        /* Microphone button */
-        #mic-button {
-            position: fixed;
-            bottom: 20px;
-            right: 180px;
-            width: 56px;
-            height: 56px;
-            background: #333;
-            color: #fff;
-            border: none;
-            border-radius: 50%;
-            font-size: 24px;
-            cursor: pointer;
-            opacity: 1;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            font-weight: 700;
+            margin-bottom: 8px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            justify-content: center;
         }
-
-        #mic-button:hover {
-            background: #444;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-        }
-
-        #mic-button.recording {
-            background: #e9411b;
-            animation: recordingPulse 1.5s ease-in-out infinite;
-        }
-
-        #mic-button.not-supported {
-            background: #999;
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
-
-        @keyframes recordingPulse {
-            0%, 100% {
-                transform: scale(1);
-                box-shadow: 0 2px 8px rgba(233, 65, 27, 0.3);
-            }
-            50% {
-                transform: scale(1.1);
-                box-shadow: 0 4px 16px rgba(233, 65, 27, 0.6);
-            }
-        }
-
-        /* Recording status indicator */
-        #recording-status {
-            position: fixed;
-            bottom: 90px;
-            right: 180px;
-            background: rgba(0, 0, 0, 0.8);
-            color: #fff;
-            padding: 8px 16px;
-            border-radius: 20px;
+        .def-list { margin: 6px 0 10px 18px; font-size: 13px; color: #334155; line-height: 1.5; }
+        .example-quote {
             font-size: 12px;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            pointer-events: none;
-            white-space: nowrap;
+            font-style: italic;
+            color: #475569;
+            background: #f8fafc;
+            border-left: 3px solid #cbd5e1;
+            padding: 6px 10px;
+            margin-bottom: 10px;
+        }
+        .rel-group { margin-top: 8px; }
+        .rel-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; margin-bottom: 4px; }
+        .alt-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin: 0 6px 6px 0;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #0f172a;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .alt-btn:hover { background: #fff1ee; border-color: #e9411b; color: #c22e0c; }
+        .sim-score {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 999px;
+            background: #e0e7ff;
+            color: #3730a3;
         }
 
-        #recording-status.visible {
-            opacity: 1;
+        #lexical-graph-svg {
+            width: 100%;
+            height: 290px;
+            display: block;
+            background: #fcfdff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
         }
+
+        .bottom-actions {
+            position: fixed;
+            bottom: 16px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            z-index: 900;
+        }
+        .action-btn {
+            border: none;
+            border-radius: 999px;
+            padding: 10px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+        }
+        #copy-button { background: #e9411b; color: #fff; }
+        #copy-button.copied { background: #16a34a; }
+        #mic-button { background: #334155; color: #fff; }
+        #mic-button.recording { background: #dc2626; }
+        #mic-button.not-supported { opacity: 0.55; cursor: not-allowed; }
     </style>
 </head>
 <body>
-    <div style="position: fixed; top: 14px; left: 16px; z-index: 1000; display: flex; gap: 8px; align-items: center; background: rgba(255,255,255,0.92); border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 12px; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
-        <a href="https://1kaiser.github.io/" style="color: #1f2937; font-weight: 600; text-decoration: none;">&larr; 1kaiser.github.io</a>
-        <span style="color: #d1d5db;">|</span>
-        <a href="https://github.com/1kaiser/wordy" target="_blank" rel="noopener" style="color: #4b5563; text-decoration: none;">GitHub</a>
-        <button id="wordy-refs-btn" type="button" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 12px; color: #111827;">References</button>
+    <div class="top-left-bar">
+        <a href="https://1kaiser.github.io/">&larr; 1kaiser.github.io</a>
+        <span style="color: #cbd5e1;">|</span>
+        <a class="muted" href="https://github.com/1kaiser/wordy" target="_blank" rel="noopener">GitHub</a>
+        <button id="wordy-refs-btn" class="btn-mini" type="button">References</button>
     </div>
-    <!-- Toggle Buttons -->
-    <button class="toggle-btn muvera-toggle-btn" onclick="toggleMuVeRa()">
+
+    <button class="toggle-btn muvera-toggle-btn" type="button" onclick="toggleMuVeRa()">
         🔄 MuVeRa Search
     </button>
-    <button class="toggle-btn rag-toggle-btn" onclick="toggleRAGDemo()">
+    <button class="toggle-btn rag-toggle-btn" type="button" onclick="toggleRAGDemo()">
         🤖 RAG Pipeline
     </button>
 
-    <!-- MuVeRa Container (slides in from right) -->
     <div id="muvera-container" class="slide-container">
         <iframe id="muvera-iframe" data-src="muvera.html"></iframe>
     </div>
-
-    <!-- RAG Demo Container (slides in from right) -->
     <div id="rag-demo-container" class="slide-container">
         <iframe id="rag-iframe" data-src="rag-demo.html"></iframe>
     </div>
 
     <div id="app">
-        <!-- Loading overlay -->
-        <div id="loading-overlay" :class="{ hidden: corpusReady }">
-            <div class="loading-message">
-                <div class="loading-spinner"></div>
-                <div class="loading-text">Loading 147,480 words...</div>
-                <div class="loading-text" style="margin-top: 8px; font-size: 12px; color: #999;">
-                    Please wait, interaction will be enabled shortly
-                </div>
+        <h1 style="font-size: 22px; font-weight: 700;">Wordy &mdash; WordNet 3.1 Lexical Graph &amp; Semantic Explorer</h1>
+        <p class="hero-sub">
+            Type or paste any sentence (supports <kbd>Ctrl+V</kbd>, Space, Enter). Click any word pill to inspect Princeton WordNet 3.1 definitions, synset graph neighbors, antonyms, and optional neural similarity rankings.
+        </p>
+
+        <div class="composer-row">
+            <input
+                type="text"
+                id="text-input"
+                placeholder="Type or paste a sentence (e.g. The ephemeral ocean sunrise)..."
+                autocomplete="off"
+                autofocus
+                v-model="inputText"
+                @keydown="handleKeydown"
+                @paste="handlePaste"
+            />
+            <button id="add-text-btn" class="btn-mini" type="button" @click="commitInputText">Box Words</button>
+            <button id="clear-btn" class="btn-mini" type="button" v-if="words.length" @click="clearAll">Clear</button>
+        </div>
+
+        <div class="chips-row">
+            <button v-for="sample in sampleSentences" :key="sample" type="button" class="chip" @click="loadSample(sample)">{{ sample }}</button>
+        </div>
+
+        <div class="toolbar-row">
+            <span id="lexicon-status" class="status-pill">{{ lexiconStatus }}</span>
+            <button id="rerank-btn" class="btn-mini" type="button" @click="enableNeuralReranker" :disabled="rerankerBusy || rerankerReady">
+                {{ rerankerReady ? 'Neural Reranker Active (MiniLM)' : (rerankerBusy ? rerankerProgressText : 'Load Neural Reranker (~23 MB)') }}
+            </button>
+            <button id="dense-corpus-btn" class="btn-mini" type="button" @click="loadOptionalDenseCorpus" :disabled="denseBusy || denseReady">
+                {{ denseReady ? '147K Dense Corpus Loaded' : (denseBusy ? denseProgressText : 'Optional: Load 147K Dense Corpus (455 MB)') }}
+            </button>
+        </div>
+
+        <div id="word-boxes" class="word-boxes-strip">
+            <div
+                v-for="(w, idx) in words"
+                :key="idx + '-' + w.word"
+                :class="['word-pill', w.entry ? 'in-wordnet' : 'unknown', selectedIdx === idx ? 'selected' : '']"
+                :data-word="w.word"
+                @click="selectWord(idx)"
+            >
+                <span>{{ w.word }}</span>
             </div>
         </div>
 
-        <div id="instructions" :class="{ hidden: words.length > 0 }">
-            Type or paste text to begin...
+        <div v-if="activeWord" id="wordnet-inspector" class="inspector-grid">
+            <div class="panel-card">
+                <h3>
+                    <span>WordNet 3.1: &ldquo;{{ activeWord.word }}&rdquo;</span>
+                    <span v-if="activeWord.entry" style="font-size: 11px; color: #64748b; font-weight: 500;">Click an alternative to replace in sentence</span>
+                </h3>
+                <template v-if="activeWord.entry">
+                    <ul class="def-list">
+                        <li v-for="def in activeWord.entry.d" :key="def">{{ def }}</li>
+                    </ul>
+                    <div v-if="activeWord.entry.e" class="example-quote">&ldquo;{{ activeWord.entry.e }}&rdquo;</div>
+
+                    <div v-if="rankedAlternatives.synonyms.length" class="rel-group">
+                        <div class="rel-title">Synonyms &amp; Sister Terms</div>
+                        <button
+                            v-for="alt in rankedAlternatives.synonyms"
+                            :key="'s-' + alt.word"
+                            type="button"
+                            class="alt-btn"
+                            @click="replaceSelectedWord(alt.word)"
+                        >
+                            <span>{{ alt.word }}</span>
+                            <span v-if="alt.score !== null" class="sim-score">{{ (alt.score * 100).toFixed(0) }}%</span>
+                        </button>
+                    </div>
+
+                    <div v-if="rankedAlternatives.broader.length" class="rel-group">
+                        <div class="rel-title">Broader / Hypernyms</div>
+                        <button
+                            v-for="alt in rankedAlternatives.broader"
+                            :key="'h-' + alt.word"
+                            type="button"
+                            class="alt-btn"
+                            @click="replaceSelectedWord(alt.word)"
+                        >
+                            <span>{{ alt.word }}</span>
+                            <span v-if="alt.score !== null" class="sim-score">{{ (alt.score * 100).toFixed(0) }}%</span>
+                        </button>
+                    </div>
+
+                    <div v-if="rankedAlternatives.narrower.length" class="rel-group">
+                        <div class="rel-title">Narrower / Hyponyms</div>
+                        <button
+                            v-for="alt in rankedAlternatives.narrower"
+                            :key="'y-' + alt.word"
+                            type="button"
+                            class="alt-btn"
+                            @click="replaceSelectedWord(alt.word)"
+                        >
+                            <span>{{ alt.word }}</span>
+                            <span v-if="alt.score !== null" class="sim-score">{{ (alt.score * 100).toFixed(0) }}%</span>
+                        </button>
+                    </div>
+
+                    <div v-if="rankedAlternatives.antonyms.length" class="rel-group">
+                        <div class="rel-title">Antonyms</div>
+                        <button
+                            v-for="alt in rankedAlternatives.antonyms"
+                            :key="'a-' + alt.word"
+                            type="button"
+                            class="alt-btn"
+                            @click="replaceSelectedWord(alt.word)"
+                        >
+                            <span>{{ alt.word }}</span>
+                            <span v-if="alt.score !== null" class="sim-score">{{ (alt.score * 100).toFixed(0) }}%</span>
+                        </button>
+                    </div>
+
+                    <div v-if="denseNeighbors.length" class="rel-group">
+                        <div class="rel-title">147K EmbeddingGemma Corpus Neighbors (Worker Cosine Search)</div>
+                        <button
+                            v-for="alt in denseNeighbors"
+                            :key="'d-' + alt.word"
+                            type="button"
+                            class="alt-btn"
+                            @click="replaceSelectedWord(alt.word)"
+                        >
+                            <span>{{ alt.word }}</span>
+                            <span class="sim-score">{{ (alt.similarity * 100).toFixed(0) }}%</span>
+                        </button>
+                    </div>
+                </template>
+                <p v-else style="font-size: 13px; color: #64748b;">No entry found in the 24,000-lemma core WordNet index.</p>
+            </div>
+
+            <div class="panel-card">
+                <h3>
+                    <span>Lexical Neighborhood Graph (D3.js v7)</span>
+                    <span style="font-size: 11px; color: #64748b; font-weight: 500;">Click a node to replace</span>
+                </h3>
+                <svg id="lexical-graph-svg"></svg>
+            </div>
         </div>
 
-        <input
-            type="text"
-            id="text-input"
-            :class="{ ready: corpusReady, 'has-words': words.length > 0 }"
-            :style="{ pointerEvents: words.length > 0 ? 'none' : 'all' }"
-            placeholder="Start typing..."
-            autofocus
-            v-model="inputText"
-            @keydown="handleKeydown"
-            @paste="handlePaste"
-        />
-
-        <div id="svg-container">
-            <svg id="main-svg"></svg>
-        </div>
-
-        <div class="esc-hint" :class="{ visible: words.length > 0 }">
-            Press ESC to clear
-        </div>
-
-        <button
-            id="copy-button"
-            :class="{ visible: words.length > 0, copied: copySuccess }"
-            @click="copyText"
-        >
-            {{ copySuccess ? '✓ Copied!' : 'Copy Text' }}
-        </button>
-
-        <button
-            id="mic-button"
-            :class="{ recording: isRecording, 'not-supported': !speechSupported }"
-            @click="toggleRecording"
-            :title="speechSupported ? (isRecording ? 'Stop Recording' : 'Start Voice Input') : 'Speech Recognition Not Supported'"
-        >
-            {{ isRecording ? '⏹' : '🎤' }}
-        </button>
-
-        <div id="recording-status" :class="{ visible: isRecording }">
-            {{ recordingStatus }}
+        <div class="bottom-actions">
+            <button v-if="words.length" id="copy-button" type="button" class="action-btn" :class="{ copied: copySuccess }" @click="copyText">
+                {{ copySuccess ? '✓ Copied' : 'Copy Text' }}
+            </button>
+            <button
+                id="mic-button"
+                type="button"
+                class="action-btn"
+                :class="{ recording: isRecording, 'not-supported': !speechSupported }"
+                @click="toggleRecording"
+                :title="speechSupported ? (isRecording ? 'Stop Recording' : 'Voice Input') : 'Speech Recognition Not Supported'"
+            >{{ isRecording ? '⏹ Stop Mic' : '🎤 Voice' }}</button>
         </div>
     </div>
 
-    <!-- Vue.js 3 CDN -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- D3.js CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-
-    <!-- Corpus Background Preloader (downloads 455MB corpus for RAG) -->
     <script src="corpus-preloader.js"></script>
-
     <script src="minimal-search.js"></script>
 
-    <!-- Panel Toggle Scripts -->
     <script>
         function toggleMuVeRa() {
             const container = document.getElementById('muvera-container');
             const button = document.querySelector('.muvera-toggle-btn');
             const iframe = document.getElementById('muvera-iframe');
-            const textInput = document.getElementById('text-input');
             const ragContainer = document.getElementById('rag-demo-container');
 
             if (container.classList.contains('visible')) {
-                // Hide MuVeRa
                 container.classList.remove('visible');
                 button.textContent = '🔄 MuVeRa Search';
-                button.style.background = 'white';
-                button.style.color = '#667eea';
-                button.style.borderColor = '#667eea';
-
-                // Blur input to prevent cursor from appearing
-                textInput.blur();
+                button.style.background = '#fff';
+                button.style.color = '#4f46e5';
             } else {
-                // Close RAG if open
-                if (ragContainer.classList.contains('visible')) {
-                    toggleRAGDemo();
-                }
-
-                // Lazy load iframe on first click
-                if (!iframe.src && iframe.dataset.src) {
-                    console.log('🔄 Loading MuVeRa for the first time...');
-                    iframe.src = iframe.dataset.src;
-                }
-
-                // Show MuVeRa
+                if (ragContainer.classList.contains('visible')) toggleRAGDemo();
+                if (!iframe.src && iframe.dataset.src) iframe.src = iframe.dataset.src;
                 container.classList.add('visible');
                 button.textContent = '← Back to Search';
-                button.style.background = '#667eea';
-                button.style.color = 'white';
+                button.style.background = '#4f46e5';
+                button.style.color = '#fff';
             }
         }
 
@@ -552,58 +485,36 @@
             const container = document.getElementById('rag-demo-container');
             const button = document.querySelector('.rag-toggle-btn');
             const iframe = document.getElementById('rag-iframe');
-            const textInput = document.getElementById('text-input');
             const muveraContainer = document.getElementById('muvera-container');
 
             if (container.classList.contains('visible')) {
-                // Hide RAG demo
                 container.classList.remove('visible');
                 button.textContent = '🤖 RAG Pipeline';
-                button.style.background = 'white';
+                button.style.background = '#fff';
                 button.style.color = '#e9411b';
-
-                // Blur input to prevent cursor from appearing
-                textInput.blur();
             } else {
-                // Close MuVeRa if open
-                if (muveraContainer.classList.contains('visible')) {
-                    toggleMuVeRa();
-                }
-
-                // Lazy load iframe on first click (avoids loading models in background)
-                if (!iframe.src && iframe.dataset.src) {
-                    console.log('🔄 Loading RAG demo for the first time...');
-                    iframe.src = iframe.dataset.src;
-                }
-
-                // Show RAG demo
+                if (muveraContainer.classList.contains('visible')) toggleMuVeRa();
+                if (!iframe.src && iframe.dataset.src) iframe.src = iframe.dataset.src;
                 container.classList.add('visible');
                 button.textContent = '← Back to Search';
                 button.style.background = '#e9411b';
-                button.style.color = 'white';
+                button.style.color = '#fff';
             }
         }
 
-        // ESC key to close any open panel
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                const ragContainer = document.getElementById('rag-demo-container');
-                const muveraContainer = document.getElementById('muvera-container');
-
-                if (ragContainer.classList.contains('visible')) {
-                    e.stopPropagation();  // Prevent Vue app from clearing words
-                    e.preventDefault();
-                    toggleRAGDemo();
-                } else if (muveraContainer.classList.contains('visible')) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    toggleMuVeRa();
-                }
+            if (e.key !== 'Escape') return;
+            const rag = document.getElementById('rag-demo-container');
+            const muvera = document.getElementById('muvera-container');
+            if (rag.classList.contains('visible')) {
+                e.stopPropagation(); e.preventDefault(); toggleRAGDemo();
+            } else if (muvera.classList.contains('visible')) {
+                e.stopPropagation(); e.preventDefault(); toggleMuVeRa();
             }
-        }, true);  // Use capture phase to intercept ESC before Vue
+        }, true);
     </script>
 
-    <div id="wordy-refs-modal" style="display: none; position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.45); align-items: center; justify-content: center; padding: 20px;">
+    <div id="wordy-refs-modal" style="display: none; position: fixed; inset: 0; z-index: 10001; background: rgba(0,0,0,0.45); align-items: center; justify-content: center; padding: 20px;">
         <div style="background: #fff; border-radius: 12px; max-width: 580px; width: 100%; padding: 20px 24px; box-shadow: 0 12px 32px rgba(0,0,0,0.2); font-size: 13px; color: #374151; line-height: 1.65;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;">
                 <strong style="font-size: 15px; color: #111827;">Wordy References &amp; Citations</strong>
@@ -612,7 +523,7 @@
             <ul style="margin: 0; padding-left: 18px;">
                 <li><strong>WordNet 3.1:</strong> Miller, G. A. (1995), <em>WordNet: A Lexical Database for English</em>, CACM 38(11); Fellbaum, C. (1998), <em>WordNet: An Electronic Lexical Database</em>, MIT Press (<a href="https://wordnet.princeton.edu/" target="_blank" rel="noopener">wordnet.princeton.edu</a>).</li>
                 <li><strong>MUVERA Retrieval:</strong> Jayaram, R., Dhulipala, L., Hadian, M., Lee, J., &amp; Mirrokni, V. (2024). <a href="https://arxiv.org/abs/2405.19504" target="_blank" rel="noopener">arXiv:2405.19504</a>.</li>
-                <li><strong>Models &amp; Runtime:</strong> Google <a href="https://arxiv.org/abs/2503.19786" target="_blank" rel="noopener">Gemma 3 270M</a>, <a href="https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX" target="_blank" rel="noopener">EmbeddingGemma-300M</a>, <a href="https://huggingface.co/docs/transformers.js" target="_blank" rel="noopener">Transformers.js</a>, <a href="https://vuejs.org/" target="_blank" rel="noopener">Vue 3</a> &amp; <a href="https://d3js.org/" target="_blank" rel="noopener">D3.js v7</a>.</li>
+                <li><strong>Models &amp; Runtime:</strong> <a href="https://huggingface.co/Xenova/all-MiniLM-L6-v2" target="_blank" rel="noopener">all-MiniLM-L6-v2</a>, Google <a href="https://arxiv.org/abs/2503.19786" target="_blank" rel="noopener">Gemma 3 270M</a>, Liquid <a href="https://huggingface.co/onnx-community/LFM2.5-350M-ONNX" target="_blank" rel="noopener">LFM 2.5</a>, <a href="https://huggingface.co/onnx-community/SmolLM2-360M-Instruct-ONNX" target="_blank" rel="noopener">SmolLM2</a>, <a href="https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX" target="_blank" rel="noopener">EmbeddingGemma-300M</a>, <a href="https://huggingface.co/docs/transformers.js" target="_blank" rel="noopener">Transformers.js 4.3.2</a>, <a href="https://vuejs.org/" target="_blank" rel="noopener">Vue 3</a> &amp; <a href="https://d3js.org/" target="_blank" rel="noopener">D3.js v7</a>.</li>
                 <li><strong>Home:</strong> <a href="https://1kaiser.github.io/">1kaiser.github.io</a> &middot; <a href="https://github.com/1kaiser/wordy" target="_blank" rel="noopener">1kaiser/wordy</a>.</li>
             </ul>
         </div>

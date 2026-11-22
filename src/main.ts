@@ -1,1037 +1,503 @@
-/**
- * MuVeRa Complete Animation + EmbeddingGemma Integration
- * 
- * Combines the working side-by-side query/document animation with
- * production EmbeddingGemma semantic embeddings for enhanced similarity.
- */
-
 import * as d3 from 'd3';
-import { TextFDEProcessor } from './muvera/text-vectorizer.js';
-import { ProductionEmbeddingGemma, createProductionEmbeddingGemma } from './muvera/production-embedding-gemma.js';
+import {
+  EncodingType,
+  type FDEResult,
+  type FixedDimensionalEncodingConfig,
+  computeFDE,
+  computeChamferSimilarity,
+  computeFDEEstimate,
+  cosineSim,
+  l2Normalize,
+  projectJointPCA2D
+} from './muvera/fde-algorithm.ts';
+import { createMuveraWorker, type MuveraModelId } from './muvera/embedding-worker.ts';
 
-interface AnimationState {
-  step: number;
-  isRunning: boolean;
-  isPaused: boolean;
-  animationType: 'query' | 'document';
+interface EncodedText {
+  words: string[];
+  tokenVectors: number[][];
+  sentenceVector: number[];
+  dimension: number;
 }
 
-class MuVeRaAnimation {
-  private semanticSvg: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
-  private fdeSvg: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
-  private bottomSvg: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
-  private queryTextDiv: d3.Selection<HTMLDivElement, unknown, HTMLElement, any>;
-  
-  // Document animation containers
-  private semanticSvgDoc: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
-  private fdeSvgDoc: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
-  private bottomSvgDoc: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
-  private queryTextDivDoc: d3.Selection<HTMLDivElement, unknown, HTMLElement, any>;
-  private fdeProcessor: TextFDEProcessor;
-  
-  // EmbeddingGemma integration
-  private productionEmbeddingGemma: ProductionEmbeddingGemma | null = null;
-  private embeddingStatus: d3.Selection<HTMLDivElement, unknown, HTMLElement, any>;
-  private modelLoaded = false;
-  
-  // Document processing
-  private documents: string[] = [];
-  private documentEmbeddings: number[][] = [];
-  private processedDocumentsCount = 0;
-  
-  private state: AnimationState = {
-    step: 0,
-    isRunning: true,
-    isPaused: false,
-    animationType: 'query'
-  };
-  
-  // Text data - will be updated from input fields
-  private queryText = 'What is the height of Mount Everest?';
-  private docText = 'Mount Everest is 8,848 meters high.';
-  
-  // Input control elements
-  private queryInput: HTMLInputElement;
-  private documentInput: HTMLInputElement;
-  
-  // New UI elements for enhanced workflow
-  private unloadEmbeddingBtn: HTMLButtonElement;
-  private documentCollectionTextarea: HTMLTextAreaElement;
-  private processDocumentsBtn: HTMLButtonElement;
-  private clearDocumentsBtn: HTMLButtonElement;
-  private updateVisualizationBtn: HTMLButtonElement;
-  private searchQueryInput: HTMLInputElement;
-  private searchDocumentsBtn: HTMLButtonElement;
-  private topKSelect: HTMLSelectElement;
-  private documentFilesInput: HTMLInputElement;
-  private loadDefaultDocsBtn: HTMLButtonElement;
-  private clearAllDocsBtn: HTMLButtonElement;
-  
-  // Computed FDE data
-  private queryData: any;
-  private docData: any;
-  
-  // Semantic embedding data
-  private queryEmbedding: number[] | null = null;
-  private docEmbedding: number[] | null = null;
-  
-  // Track highlighted sectors
-  private highlightedSectors: Set<number> = new Set();
-  
-  // Track all token positions globally to prevent overlaps
-  private allTokenPositions: {x: number, y: number, radius: number}[] = [];
-  
-  // Random token alphabets (avoid query word letters)
-  private tokenAlphabets = ['z', 'y', 'x', 'v', 't', 'u', 'w', 'k', 'q', 'j'];
-  
-  // Display colors
-  private colors = ['#ea4335', '#4285f4', '#fbbc05', '#34a853', '#9c27b0', '#00bcd4', '#ff5722'];
-  
-  // Random hyperplane angles for query and document (3 hyperplanes each)
-  private queryHyperplanes: number[] = [];
-  private documentHyperplanes: number[] = [];
-  
+const DEFAULT_DOCS = [
+  'Mount Everest rises 8,848 meters above sea level in the Himalayas, making it the tallest mountain on Earth.',
+  'The Pacific Ocean is the largest and deepest oceanic division on Earth, covering one-third of the surface.',
+  'Photosynthesis converts solar photons into chemical energy inside plant chloroplasts using chlorophyll.',
+  'The speed of light in vacuum is 299,792,458 meters per second, a fundamental physical constant.',
+  'Deoxyribonucleic acid (DNA) encodes hereditary instructions across all known cellular organisms.',
+  'The Great Wall of China spans over 21,000 kilometers across northern mountains and plateaus.',
+  'The human brain contains roughly 86 billion neurons connected via trillions of synapses.',
+  'Liquid water covers approximately 71 percent of Earth\'s planetary surface.',
+  'Tropical rainforests in the Amazon basin generate immense biodiversity and cycle global moisture.',
+  'Quantum mechanics describes quantized energy levels, superposition, and entanglement at atomic scales.'
+];
+
+const PRESET_PAIRS = [
+  {
+    query: 'What is the height of Mount Everest?',
+    doc: 'Mount Everest rises 8,848 meters above sea level in the Himalayas.'
+  },
+  {
+    query: 'How do plants capture sunlight for energy?',
+    doc: 'Photosynthesis converts solar photons into chemical energy inside plant chloroplasts.'
+  },
+  {
+    query: 'Why does ice float on liquid oceans?',
+    doc: 'Solid ice has lower density than cold liquid water due to hydrogen bonding.'
+  },
+  {
+    query: 'When did quantum physics discover atomic scales?',
+    doc: 'Quantum mechanics explains energy quantization and wave-particle duality at atomic scales.'
+  }
+];
+
+function deterministicEncode(text: string, dim = 64): EncodedText {
+  const words = text.trim().split(/\s+/).map(w => w.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9'-]+$/g, '')).filter(Boolean);
+  const tokens = words.length ? words : ['text'];
+  const tokenVectors = tokens.map(w => {
+    const low = w.toLowerCase();
+    let seed = 0;
+    for (let c = 0; c < low.length; c++) seed += low.charCodeAt(c) * (c + 1);
+    const vec = new Array(dim);
+    for (let d = 0; d < dim; d++) {
+      vec[d] = Math.sin(seed * (d + 1) * 0.017) * 0.6 + Math.cos(seed * (d + 2) * 0.031) * 0.4;
+    }
+    return l2Normalize(vec);
+  });
+  const mean = new Array(dim).fill(0);
+  for (const v of tokenVectors) {
+    for (let d = 0; d < dim; d++) mean[d] += v[d] / tokenVectors.length;
+  }
+  return { words: tokens, tokenVectors, sentenceVector: l2Normalize(mean), dimension: dim };
+}
+
+class MuVeRaVisualizer {
+  private worker: Worker | null = null;
+  private pairReqId = 0;
+  private benchReqId = 0;
+  private lastPair: { query: EncodedText; doc: EncodedText; backend: string; modelId: string } | null = null;
+  private pulseEnabled = true;
+
   constructor() {
-    console.log('🚀 Initializing MuVeRa Animation + EmbeddingGemma');
-    
-    this.semanticSvg = d3.select('#semantic-svg');
-    this.fdeSvg = d3.select('#fde-svg');
-    this.bottomSvg = d3.select('#bottom-svg');
-    this.queryTextDiv = d3.select('#query-text');
-    
-    // Initialize document animation containers
-    this.semanticSvgDoc = d3.select('#semantic-svg-doc');
-    this.fdeSvgDoc = d3.select('#fde-svg-doc');
-    this.bottomSvgDoc = d3.select('#bottom-svg-doc');
-    this.queryTextDivDoc = d3.select('#query-text-doc');
-    this.fdeProcessor = new TextFDEProcessor();
-    
-    // Initialize EmbeddingGemma status
-    this.embeddingStatus = d3.select('#embedding-status');
-    
-    // Initialize input controls
-    this.initializeInputControls();
-    
-    // Generate random hyperplanes for both query and document
-    this.generateRandomHyperplanes();
-    
-    // Process texts to get real FDE data
-    this.queryData = this.fdeProcessor.processQuery(this.queryText);
-    this.docData = this.fdeProcessor.processDocument(this.docText);
-    
-    console.log('Query FDE Data:', this.queryData);
-    console.log('Document FDE Data:', this.docData);
-    console.log('FDE Similarity:', this.fdeProcessor.calculateSimilarity(
-      this.queryData.fdeVector, 
-      this.docData.fdeVector
-    ));
-    
-    // Setup both query and document sections initially
-    this.setupInitialView('query');
-    this.setupDocumentView();
-    this.setupPauseButton();
-    this.startAnimation();
-    
-    // Update comparison panel and calculations
-    this.updateComparisonPanel();
-    this.updateFDECalculations();
-    
-    // Auto-load EmbeddingGemma model
-    this.autoLoadEmbeddingGemma();
+    this.initUI();
+    this.loadDefaultDocs();
+    this.requestPairEncoding();
+    window.addEventListener('beforeunload', () => {
+      if (this.worker) { this.worker.terminate(); this.worker = null; }
+    });
   }
 
-  private generateRandomHyperplanes(): void {
-    // Generate 3 random hyperplane angles for query (0 to π, since hyperplanes extend both ways)
-    this.queryHyperplanes = [];
-    for (let i = 0; i < 3; i++) {
-      this.queryHyperplanes.push(Math.random() * Math.PI);
+  private getConfig(dimension: number): FixedDimensionalEncodingConfig {
+    const kSim = parseInt((document.getElementById('ksim-select') as HTMLSelectElement).value, 10) || 3;
+    const R = parseInt((document.getElementById('reps-select') as HTMLSelectElement).value, 10) || 8;
+    const seed = parseInt((document.getElementById('fde-seed-select') as HTMLSelectElement).value, 10) || 42;
+    const fillEmptyPartitions = (document.getElementById('fill-empty-checkbox') as HTMLInputElement).checked;
+    return {
+      dimension,
+      numSimhashProjections: kSim,
+      numRepetitions: R,
+      seed,
+      fillEmptyPartitions
+    };
+  }
+
+  private setStatus(msg: string, kind: '' | 'ready' | 'error' = '') {
+    const el = document.getElementById('embedding-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'status-banner' + (kind ? ` ${kind}` : '');
+  }
+
+  private initUI() {
+    document.getElementById('compute-pair-btn')?.addEventListener('click', () => this.requestPairEncoding());
+    document.getElementById('muvera-model-select')?.addEventListener('change', () => this.requestPairEncoding());
+
+    for (const id of ['ksim-select', 'reps-select', 'fde-seed-select', 'fill-empty-checkbox']) {
+      document.getElementById(id)?.addEventListener('change', () => this.renderFromCachedPair());
     }
-    // Sort angles for consistent sector numbering
-    this.queryHyperplanes.sort((a, b) => a - b);
-    
-    // Generate 3 different random hyperplane angles for document
-    this.documentHyperplanes = [];
-    for (let i = 0; i < 3; i++) {
-      this.documentHyperplanes.push(Math.random() * Math.PI);
-    }
-    // Sort angles for consistent sector numbering
-    this.documentHyperplanes.sort((a, b) => a - b);
-    
-    console.log('Query hyperplanes (radians):', this.queryHyperplanes);
-    console.log('Document hyperplanes (radians):', this.documentHyperplanes);
+
+    document.getElementById('reset-btn')?.addEventListener('click', () => {
+      (document.getElementById('query-input') as HTMLInputElement).value = PRESET_PAIRS[0].query;
+      (document.getElementById('document-input') as HTMLInputElement).value = PRESET_PAIRS[0].doc;
+      this.requestPairEncoding();
+    });
+
+    let presetIdx = 0;
+    document.getElementById('random-btn')?.addEventListener('click', () => {
+      presetIdx = (presetIdx + 1) % PRESET_PAIRS.length;
+      (document.getElementById('query-input') as HTMLInputElement).value = PRESET_PAIRS[presetIdx].query;
+      (document.getElementById('document-input') as HTMLInputElement).value = PRESET_PAIRS[presetIdx].doc;
+      this.requestPairEncoding();
+    });
+
+    document.getElementById('pause-btn')?.addEventListener('click', (e) => {
+      this.pulseEnabled = !this.pulseEnabled;
+      (e.target as HTMLButtonElement).textContent = this.pulseEnabled ? 'Pause Pulse' : 'Resume Pulse';
+      this.renderFromCachedPair();
+    });
+
+    document.getElementById('load-default-docs-btn')?.addEventListener('click', () => this.loadDefaultDocs());
+    document.getElementById('search-documents-btn')?.addEventListener('click', () => this.runCollectionBenchmark());
   }
 
-  private initializeInputControls(): void {
-    this.queryInput = document.getElementById('query-input') as HTMLInputElement;
-    this.documentInput = document.getElementById('document-input') as HTMLInputElement;
-    
-    // Basic controls
-    const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
-    const randomBtn = document.getElementById('random-btn') as HTMLButtonElement;
-    resetBtn.addEventListener('click', () => this.resetToDefaults());
-    randomBtn.addEventListener('click', () => this.tryRandomExamples());
-    
-    // EmbeddingGemma model controls
-    this.unloadEmbeddingBtn = document.getElementById('unload-embedding-btn') as HTMLButtonElement;
-    this.unloadEmbeddingBtn.addEventListener('click', () => this.unloadEmbeddingGemmaModel());
-    
-    // Document processing controls
-    this.documentCollectionTextarea = document.getElementById('document-collection') as HTMLTextAreaElement;
-    this.processDocumentsBtn = document.getElementById('process-documents-btn') as HTMLButtonElement;
-    this.clearDocumentsBtn = document.getElementById('clear-documents-btn') as HTMLButtonElement;
-    this.updateVisualizationBtn = document.getElementById('update-visualization-btn') as HTMLButtonElement;
-    
-    this.processDocumentsBtn.addEventListener('click', () => this.processDocumentCollection());
-    this.clearDocumentsBtn.addEventListener('click', () => this.clearDocumentCollection());
-    this.updateVisualizationBtn.addEventListener('click', () => this.updateVisualizationFromSearch());
-    
-    // Search controls
-    this.searchQueryInput = document.getElementById('search-query') as HTMLInputElement;
-    this.searchDocumentsBtn = document.getElementById('search-documents-btn') as HTMLButtonElement;
-    this.topKSelect = document.getElementById('top-k-results') as HTMLSelectElement;
-    
-    this.searchDocumentsBtn.addEventListener('click', () => this.searchDocuments());
-    
-    // File upload and quick options
-    this.documentFilesInput = document.getElementById('document-files') as HTMLInputElement;
-    this.loadDefaultDocsBtn = document.getElementById('load-default-docs-btn') as HTMLButtonElement;
-    this.clearAllDocsBtn = document.getElementById('clear-all-docs-btn') as HTMLButtonElement;
-    
-    this.documentFilesInput.addEventListener('change', () => this.handleFileUpload());
-    this.loadDefaultDocsBtn.addEventListener('click', () => this.loadDefaultDocuments());
-    this.clearAllDocsBtn.addEventListener('click', () => this.clearAllDocuments());
+  private loadDefaultDocs() {
+    const ta = document.getElementById('document-collection') as HTMLTextAreaElement;
+    if (ta) ta.value = DEFAULT_DOCS.join('\n');
   }
 
-  private async autoLoadEmbeddingGemma(): Promise<void> {
-    console.log('🔄 Auto-loading EmbeddingGemma...');
-    
-    // Small delay to show the UI first
-    setTimeout(() => {
-      this.loadEmbeddingGemmaModel();
-    }, 1000);
-  }
+  private ensureWorker() {
+    if (this.worker) return;
+    this.worker = createMuveraWorker();
+    this.worker.onmessage = (e) => {
+      const { type, data } = e.data;
+      const track = document.getElementById('loading-progress-container');
+      const bar = document.getElementById('loading-progress-bar');
 
-  private async loadEmbeddingGemmaModel(): Promise<void> {
-    console.log('🤖 Loading EmbeddingGemma Model...');
-    
-    // Show loading progress
-    d3.select('#loading-progress-container').style('display', 'block');
-    d3.select('#loading-progress-bar').style('width', '0%');
-    d3.select('#loading-progress-text').text('0%');
-    d3.select('#loading-details').text('Initializing EmbeddingGemma...');
-    
-    this.embeddingStatus.text('🔄 Loading EmbeddingGemma (308M parameters, ~160MB download)...');
-    
-    try {
-      // Create production EmbeddingGemma instance
-      this.productionEmbeddingGemma = createProductionEmbeddingGemma({
-        device: 'auto',
-        quantized: true,
-        embeddingDimension: 768
-      });
-
-      // Progress callback for UI updates
-      const progressCallback = (progress: any) => {
-        if (progress.status === "progress" && progress.file.endsWith(".onnx_data")) {
-          const percentage = Math.round((progress.loaded / progress.total) * 100);
-          d3.select('#loading-progress-bar').style('width', `${percentage}%`);
-          d3.select('#loading-progress-text').text(`${percentage}%`);
-          d3.select('#loading-details').text(`Downloading model: ${(progress.loaded / 1024 / 1024).toFixed(1)}MB / ${(progress.total / 1024 / 1024).toFixed(1)}MB`);
-          this.embeddingStatus.text(`🔄 Loading EmbeddingGemma: ${percentage}% (${(progress.loaded / 1024 / 1024).toFixed(1)}MB)`);
+      if (type === 'progress') {
+        if (track && bar) {
+          track.style.display = 'block';
+          bar.style.width = `${data.percent}%`;
         }
-      };
-
-      const startTime = performance.now();
-      await this.productionEmbeddingGemma.initialize(progressCallback);
-      const loadTime = performance.now() - startTime;
-
-      // Complete loading
-      d3.select('#loading-progress-bar').style('width', '100%');
-      d3.select('#loading-progress-text').text('✅ Complete');
-      d3.select('#loading-details').text(`Model loaded successfully in ${(loadTime/1000).toFixed(1)}s`);
-      
-      this.embeddingStatus.text(`✅ EmbeddingGemma loaded successfully! (${(loadTime/1000).toFixed(1)}s) Ready for document processing.`);
-      
-      // Update UI state
-      this.modelLoaded = true;
-      this.unloadEmbeddingBtn.style.display = 'inline-block';
-      
-      // Show document processing section and other UI sections
-      d3.select('#document-processing-section').style('display', 'block');
-      d3.select('#basic-input-section').style('display', 'block');
-      d3.select('#math-section').style('display', 'block');
-      
-      // Setup collapsible math section
-      this.setupCollapsibleMathSection();
-      
-      // Auto-load default documents
-      setTimeout(() => {
-        this.loadDefaultDocuments();
-      }, 500);
-      
-      console.log('✅ EmbeddingGemma model loaded successfully');
-      
-      // Update performance metrics
-      this.updatePerformanceMetrics(loadTime);
-
-    } catch (error) {
-      console.error('❌ EmbeddingGemma failed:', error);
-      this.embeddingStatus.text(`❌ EmbeddingGemma failed: ${error.message}`);
-      
-      d3.select('#loading-progress-bar').style('width', '0%').style('background', '#f44336');
-      d3.select('#loading-progress-text').text('❌ Failed');
-      d3.select('#loading-details').text(`Error: ${error.message}`);
-      
-    }
-  }
-
-  private unloadEmbeddingGemmaModel(): void {
-    console.log('🗑️ Unloading EmbeddingGemma Model...');
-    
-    this.productionEmbeddingGemma = null;
-    this.modelLoaded = false;
-    this.documents = [];
-    this.documentEmbeddings = [];
-    this.processedDocumentsCount = 0;
-    
-    // Reset UI
-    this.embeddingStatus.text('EmbeddingGemma: Ready to load (308M parameter model, ~160MB download)');
-    this.unloadEmbeddingBtn.style.display = 'none';
-    
-    // Hide progress and sections
-    d3.select('#loading-progress-container').style('display', 'none');
-    d3.select('#document-processing-section').style('display', 'none');
-    d3.select('#query-processing-section').style('display', 'none');
-    
-    console.log('✅ EmbeddingGemma model unloaded');
-  }
-
-  private async processDocumentCollection(): Promise<void> {
-    if (!this.modelLoaded || !this.productionEmbeddingGemma) {
-      alert('Please load the EmbeddingGemma model first!');
-      return;
-    }
-    
-    const documentText = this.documentCollectionTextarea.value.trim();
-    if (!documentText) {
-      alert('Please enter some documents to process!');
-      return;
-    }
-    
-    // Parse documents (one per line)
-    this.documents = documentText.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
-      
-    if (this.documents.length === 0) {
-      alert('No valid documents found!');
-      return;
-    }
-    
-    console.log(`🔄 Processing ${this.documents.length} documents...`);
-    
-    // Show embedding progress
-    d3.select('#embedding-progress-container').style('display', 'block');
-    d3.select('#embedding-progress-bar').style('width', '0%');
-    d3.select('#embedding-progress-text').text(`0/${this.documents.length} documents`);
-    d3.select('#embedding-details').text('Starting document processing...');
-    
-    this.processDocumentsBtn.disabled = true;
-    this.documentEmbeddings = [];
-    this.processedDocumentsCount = 0;
-    
-    try {
-      // Track timing statistics
-      const timings: number[] = [];
-      const startBatch = performance.now();
-      
-      // Process documents one by one with progress updates
-      for (let i = 0; i < this.documents.length; i++) {
-        const doc = this.documents[i];
-        
-        d3.select('#embedding-details').text(`Processing document ${i + 1}/${this.documents.length}: "${doc.substring(0, 50)}..."`);
-        
-        // Time each embedding generation
-        const startTime = performance.now();
-        
-        // Generate embedding with document prefix
-        const embedding = await this.productionEmbeddingGemma.generateEmbedding(`search_document: ${doc}`);
-        
-        const endTime = performance.now();
-        const embeddingTime = endTime - startTime;
-        timings.push(embeddingTime);
-        
-        this.documentEmbeddings.push(embedding);
-        this.processedDocumentsCount++;
-        
-        // Calculate average time
-        const avgTime = timings.reduce((a, b) => a + b, 0) / timings.length;
-        
-        // Update progress with timing info
-        const percentage = Math.round(((i + 1) / this.documents.length) * 100);
-        d3.select('#embedding-progress-bar').style('width', `${percentage}%`);
-        d3.select('#embedding-progress-text').text(`${i + 1}/${this.documents.length} documents (${embeddingTime.toFixed(0)}ms, avg: ${avgTime.toFixed(0)}ms)`);
-        
-        // Small delay to show progress
-        await new Promise(resolve => setTimeout(resolve, 100));
+        this.setStatus(`Downloading embedding weights (${data.percent}%)...`);
+      } else if (type === 'pair_encoded') {
+        if (data.requestId !== this.pairReqId) return;
+        if (track) track.style.display = 'none';
+        this.setStatus(`Active Backend: ${data.modelId} (${data.backend.toUpperCase()})`, 'ready');
+        this.lastPair = data;
+        this.renderFromCachedPair();
+      } else if (type === 'collection_progress') {
+        this.setStatus(`Encoding collection ${data.done}/${data.total}...`);
+      } else if (type === 'collection_encoded') {
+        if (data.requestId !== this.benchReqId) return;
+        this.setStatus(`Collection benchmark complete (${data.modelId}, ${data.backend.toUpperCase()})`, 'ready');
+        this.renderBenchmarkTable(data.query, data.docs);
+      } else if (type === 'error') {
+        if (track) track.style.display = 'none';
+        this.setStatus(`Worker fallback (${data.message}) — showing deterministic cloud`, 'error');
       }
-      
-      // Calculate final statistics
-      const totalTime = performance.now() - startBatch;
-      const avgTime = timings.reduce((a, b) => a + b, 0) / timings.length;
-      
-      // Complete with timing statistics
-      d3.select('#embedding-details').text(`✅ Processed ${this.documents.length} documents | Total: ${(totalTime/1000).toFixed(1)}s | Avg: ${avgTime.toFixed(0)}ms per embedding`);
-      d3.select('#processed-status')
-        .style('display', 'block')
-        .text(`📊 Ready: ${this.documents.length} documents processed with 768D embeddings`);
-      
-      // Show update visualization button and query section
-      this.updateVisualizationBtn.style.display = 'inline-block';
-      d3.select('#query-processing-section').style('display', 'block');
-      
-      console.log(`✅ Processed ${this.documents.length} documents successfully`);
-      
-    } catch (error) {
-      console.error('❌ Document processing failed:', error);
-      d3.select('#embedding-details').text(`❌ Processing failed: ${error.message}`);
-    } finally {
-      this.processDocumentsBtn.disabled = false;
-    }
+    };
   }
 
-  private clearDocumentCollection(): void {
-    this.documentCollectionTextarea.value = '';
-    this.documents = [];
-    this.documentEmbeddings = [];
-    this.processedDocumentsCount = 0;
-    
-    // Hide progress and status
-    d3.select('#embedding-progress-container').style('display', 'none');
-    d3.select('#processed-status').style('display', 'none');
-    d3.select('#query-processing-section').style('display', 'none');
-    d3.select('#search-results-container').style('display', 'none');
-    
-    this.updateVisualizationBtn.style.display = 'none';
-    
-    console.log('🗑️ Document collection cleared');
-  }
+  private requestPairEncoding() {
+    const queryText = (document.getElementById('query-input') as HTMLInputElement).value.trim() || PRESET_PAIRS[0].query;
+    const docText = (document.getElementById('document-input') as HTMLInputElement).value.trim() || PRESET_PAIRS[0].doc;
+    const modelId = (document.getElementById('muvera-model-select') as HTMLSelectElement).value as MuveraModelId;
 
-  private async searchDocuments(): Promise<void> {
-    if (!this.modelLoaded || !this.productionEmbeddingGemma) {
-      alert('Please load the EmbeddingGemma model first!');
-      return;
-    }
-    
-    if (this.documents.length === 0 || this.documentEmbeddings.length === 0) {
-      alert('Please process some documents first!');
-      return;
-    }
-    
-    const query = this.searchQueryInput.value.trim();
-    if (!query) {
-      alert('Please enter a search query!');
-      return;
-    }
-    
-    const topK = parseInt(this.topKSelect.value);
-    
-    console.log(`🔍 Searching for: "${query}" (top ${topK} results)`);
-    
-    this.searchDocumentsBtn.disabled = true;
-    
-    try {
-      // Time the query embedding generation
-      const queryStartTime = performance.now();
-      
-      // Generate query embedding
-      const queryEmbedding = await this.productionEmbeddingGemma.generateEmbedding(`search_query: ${query}`);
-      
-      const queryEndTime = performance.now();
-      const queryTime = queryEndTime - queryStartTime;
-      
-      console.log(`⏱️ Query embedding generated in ${queryTime.toFixed(0)}ms`);
-      
-      // Calculate similarities
-      const similarities: { index: number, score: number, document: string }[] = [];
-      
-      for (let i = 0; i < this.documentEmbeddings.length; i++) {
-        const similarity = this.calculateCosineSimilarity(queryEmbedding, this.documentEmbeddings[i]);
-        similarities.push({
-          index: i,
-          score: similarity,
-          document: this.documents[i]
-        });
-      }
-      
-      // Sort by similarity score (descending)
-      similarities.sort((a, b) => b.score - a.score);
-      
-      // Take top K results
-      const topResults = similarities.slice(0, topK);
-      
-      // Display results with timing
-      this.displaySearchResults(query, topResults, queryTime);
-      
-      // Update visualization with top result
-      if (topResults.length > 0) {
-        const bestMatch = topResults[0];
-        this.updateVisualizationWithQueryAndDoc(query, bestMatch.document);
-      }
-      
-    } catch (error) {
-      console.error('❌ Search failed:', error);
-      alert(`Search failed: ${error.message}`);
-    } finally {
-      this.searchDocumentsBtn.disabled = false;
-    }
-  }
+    // Immediate deterministic preview so nothing shows "Loading..." at t=0
+    this.lastPair = {
+      query: deterministicEncode(queryText, 64),
+      doc: deterministicEncode(docText, 64),
+      backend: 'js',
+      modelId: 'deterministic'
+    };
+    this.renderFromCachedPair();
 
-  private displaySearchResults(query: string, results: { index: number, score: number, document: string }[], queryTime?: number): void {
-    const resultsContainer = d3.select('#search-results');
-    const resultsSection = d3.select('#search-results-container');
-    
-    resultsSection.style('display', 'block');
-    resultsContainer.selectAll('*').remove();
-    
-    // Add query info with timing if available
-    const queryInfo = resultsContainer.append('div')
-      .style('margin-bottom', '15px')
-      .style('padding', '10px')
-      .style('background', '#e3f2fd')
-      .style('border-radius', '4px')
-      .style('border', '1px solid #2196f3')
-      .html(`<strong>Query:</strong> "${query}" | <strong>Results:</strong> ${results.length} documents${queryTime ? ` | <strong>⏱️ Embedding Time:</strong> ${queryTime.toFixed(0)}ms` : ''}`);
-    
-    // Add results
-    results.forEach((result, index) => {
-      const resultDiv = resultsContainer.append('div')
-        .style('margin-bottom', '10px')
-        .style('padding', '12px')
-        .style('background', index === 0 ? '#e8f5e8' : '#f9f9f9')
-        .style('border-radius', '4px')
-        .style('border', index === 0 ? '2px solid #4caf50' : '1px solid #ddd')
-        .style('cursor', 'pointer');
-        
-      resultDiv.html(`
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-          <strong>Rank ${index + 1}</strong>
-          <span style="background: ${this.getScoreColor(result.score)}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
-            ${result.score.toFixed(4)}
-          </span>
-        </div>
-        <div style="color: #666; font-size: 14px;">${result.document}</div>
-      `);
-      
-      // Click to update visualization
-      resultDiv.on('click', () => {
-        this.updateVisualizationWithQueryAndDoc(query, result.document);
-      });
+    if (modelId === 'deterministic') {
+      this.setStatus('Deterministic Token Cloud (64D Instant)', 'ready');
+      return;
+    }
+
+    this.ensureWorker();
+    this.pairReqId++;
+    this.setStatus(`Loading ${modelId} and encoding Q & P in Web Worker...`);
+    this.worker!.postMessage({
+      type: 'encode_pair',
+      data: { requestId: this.pairReqId, modelId, queryText, docText }
     });
   }
 
-  private getScoreColor(score: number): string {
-    if (score > 0.8) return '#4caf50';
-    if (score > 0.6) return '#ff9800';
-    return '#f44336';
+  private renderFromCachedPair() {
+    if (!this.lastPair) return;
+    const { query, doc, backend, modelId } = this.lastPair;
+    const cfg = this.getConfig(query.dimension);
+    const t0 = performance.now();
+    const qFde = computeFDE(query.tokenVectors, query.words, cfg, EncodingType.DEFAULT_SUM);
+    const dFde = computeFDE(doc.tokenVectors, doc.words, cfg, EncodingType.AVERAGE);
+    const chamfer = computeChamferSimilarity(query.tokenVectors, doc.tokenVectors, cfg.dimension);
+    const fdeEst = computeFDEEstimate(qFde.fdeVector, dFde.fdeVector, cfg.numRepetitions, query.words.length);
+    const singleCos = cosineSim(query.sentenceVector, doc.sentenceVector);
+    const fdeElapsedMs = performance.now() - t0;
+
+    // Metrics Cards
+    const relErr = chamfer.chamferSum > 1e-6
+      ? (Math.abs(fdeEst.fdeSumApprox - chamfer.chamferSum) / Math.abs(chamfer.chamferSum)) * 100
+      : 0;
+    document.getElementById('chamfer-score')!.textContent = `${chamfer.chamferSum.toFixed(3)} sum (mean ${chamfer.chamferMean.toFixed(3)})`;
+    document.getElementById('similarity-score')!.textContent = `${fdeEst.fdeSumApprox.toFixed(3)} sum (cos ${fdeEst.fdeCosine.toFixed(3)})`;
+    document.getElementById('single-vec-score')!.textContent = singleCos.toFixed(4);
+    document.getElementById('hyperplane-diff')!.textContent = `Identical seed=${cfg.seed}, k=${cfg.numSimhashProjections} (${qFde.numPartitions} buckets x ${cfg.numRepetitions} reps)`;
+    document.getElementById('embedding-similarity')!.textContent = `${modelId} (${backend}, ${cfg.dimension}D)`;
+    document.getElementById('performance-comparison')!.textContent = `|FDE - Chamfer| = ${Math.abs(fdeEst.fdeSumApprox - chamfer.chamferSum).toFixed(3)} (${relErr.toFixed(1)}%)`;
+
+    document.getElementById('query-text')!.textContent = `Q (${query.words.length} tokens): ${query.words.join(' ')}`;
+    document.getElementById('query-text-doc')!.textContent = `P (${doc.words.length} tokens): ${doc.words.join(' ')}`;
+
+    // 2D Joint PCA + Shared SimHash Boundaries
+    const pca = projectJointPCA2D(query.tokenVectors, doc.tokenVectors, cfg.dimension);
+    this.drawPointCloud('#semantic-svg', pca.queryCoords, query.words, qFde.tokenPartitionRep0, cfg, '#2563eb', 'Q');
+    this.drawPointCloud('#semantic-svg-doc', pca.docCoords, doc.words, dFde.tokenPartitionRep0, cfg, '#16a34a', 'P');
+
+    this.drawPartitionBars('#fde-svg', qFde.rep0Partitions, '#2563eb', 'SUM');
+    this.drawPartitionBars('#fde-svg-doc', dFde.rep0Partitions, '#16a34a', 'AVG');
+
+    this.drawFdeHeatmap('#bottom-svg', qFde, '#2563eb');
+    this.drawFdeHeatmap('#bottom-svg-doc', dFde, '#16a34a');
+
+    // Exact Math Walkthrough Text
+    const filledCount = dFde.rep0Partitions.filter(p => p.filledByNearest).length;
+    document.getElementById('query-input-calcs')!.textContent =
+      `Tokens (|Q| = ${query.words.length}): [${query.words.join(', ')}]\n` +
+      `Vector dims: ${cfg.dimension}D L2-normalized\n` +
+      `Rep 1 Bucket IDs: [${qFde.tokenPartitionRep0.join(', ')}]`;
+    document.getElementById('query-fde-calcs')!.textContent =
+      `Shared SimHash: R=${cfg.numRepetitions} reps, k=${cfg.numSimhashProjections} hyperplanes -> P=${qFde.numPartitions} buckets/rep\n` +
+      `Non-empty Rep-1 buckets: ${qFde.rep0Partitions.filter(p => p.count > 0).length}/${qFde.numPartitions}`;
+    document.getElementById('query-aggregation-calcs')!.textContent =
+      `Aggregation: SUM per partition (empty = 0)\n` +
+      `Total FDE length: ${qFde.fdeVector.length} dims\n` +
+      `First 6 dims: [${qFde.fdeVector.slice(0, 6).map(v => v.toFixed(3)).join(', ')}]`;
+
+    document.getElementById('doc-input-calcs')!.textContent =
+      `Tokens (|P| = ${doc.words.length}): [${doc.words.join(', ')}]\n` +
+      `Vector dims: ${cfg.dimension}D L2-normalized\n` +
+      `Rep 1 Bucket IDs: [${dFde.tokenPartitionRep0.join(', ')}]`;
+    document.getElementById('doc-fde-calcs')!.textContent =
+      `Identical G^(r) projections ensure aligned buckets with Query Q.\n` +
+      `Populated Rep-1 buckets: ${dFde.rep0Partitions.filter(p => p.count > 0).length}/${dFde.numPartitions} | Nearest-filled: ${filledCount}`;
+    document.getElementById('doc-aggregation-calcs')!.textContent =
+      `Aggregation: AVERAGE (${cfg.fillEmptyPartitions ? 'with Gray-code nearest fill' : 'empty = 0'})\n` +
+      `Total FDE length: ${dFde.fdeVector.length} dims\n` +
+      `First 6 dims: [${dFde.fdeVector.slice(0, 6).map(v => v.toFixed(3)).join(', ')}]`;
+
+    const rawMultiDims = (query.words.length + doc.words.length) * cfg.dimension;
+    document.getElementById('performance-metrics')!.textContent =
+      `FDE construction + scoring time: ${fdeElapsedMs.toFixed(2)} ms\n` +
+      `Exact Chamfer Sum: ${chamfer.chamferSum.toFixed(4)} | MUVERA (1/R)<F_q, F_d>: ${fdeEst.fdeSumApprox.toFixed(4)} | Relative Diff: ${relErr.toFixed(1)}%\n` +
+      `Raw multi-vector scalars: ${rawMultiDims} floats | Single FDE vector length: ${qFde.fdeVector.length} floats (R=${cfg.numRepetitions}, P=${qFde.numPartitions})`;
   }
 
-  private updateVisualizationWithQueryAndDoc(query: string, document: string): void {
-    console.log(`🎯 Updating visualization with: "${query}" vs "${document}"`);
-    
-    // Update the current texts
-    this.queryText = query;
-    this.docText = document;
-    
-    // Update input fields
-    this.queryInput.value = query;
-    this.documentInput.value = document;
-    
-    // Process with FDE
-    this.processNewTexts();
-  }
-
-  private updateVisualizationFromSearch(): void {
-    const query = this.searchQueryInput.value.trim();
-    if (query && this.documents.length > 0) {
-      // Use first document as example
-      this.updateVisualizationWithQueryAndDoc(query, this.documents[0]);
-    }
-  }
-
-  private processNewTexts(): void {
-    this.queryText = this.queryInput.value.trim();
-    this.docText = this.documentInput.value.trim();
-    
-    if (!this.queryText || !this.docText) {
-      alert('Please enter both query and document text');
-      return;
-    }
-    
-    // Regenerate hyperplanes and reprocess
-    this.generateRandomHyperplanes();
-    this.queryData = this.fdeProcessor.processQuery(this.queryText);
-    this.docData = this.fdeProcessor.processDocument(this.docText);
-    
-    // Clear previous animations and restart
-    this.clearAllAnimations();
-    this.setupInitialView('query');
-    this.setupDocumentView();
-    this.startAnimation();
-    
-    // Update comparison panel and calculations
-    this.updateComparisonPanel();
-    this.updateFDECalculations();
-    
-    // Regenerate embeddings if EmbeddingGemma is loaded
-    if (this.productionEmbeddingGemma) {
-      this.regenerateEmbeddings();
-    }
-  }
-
-  private async regenerateEmbeddings(): Promise<void> {
-    if (!this.productionEmbeddingGemma) return;
-    
-    this.embeddingStatus.text('🔄 Regenerating embeddings for visualization...');
-    
-    try {
-      // Time the query embedding
-      const queryStartTime = performance.now();
-      this.queryEmbedding = await this.productionEmbeddingGemma.generateEmbedding(`search_query: ${this.queryText}`);
-      const queryTime = performance.now() - queryStartTime;
-      
-      // Time the document embedding
-      const docStartTime = performance.now();
-      this.docEmbedding = await this.productionEmbeddingGemma.generateEmbedding(`search_document: ${this.docText}`);
-      const docTime = performance.now() - docStartTime;
-      
-      // Display timing information
-      this.embeddingStatus.text(`✅ Embeddings updated | Query: ${queryTime.toFixed(0)}ms | Doc: ${docTime.toFixed(0)}ms`);
-      console.log(`⏱️ Visualization embeddings: Query ${queryTime.toFixed(0)}ms, Document ${docTime.toFixed(0)}ms`);
-      
-      // Update the comparison panel with new embeddings
-      this.updateComparisonPanel();
-    } catch (error) {
-      console.error('❌ Failed to regenerate embeddings:', error);
-      this.embeddingStatus.text(`❌ Failed to regenerate embeddings: ${error.message}`);
-    }
-  }
-
-  private resetToDefaults(): void {
-    this.queryInput.value = 'What is the height of Mount Everest?';
-    this.documentInput.value = 'Mount Everest is 8,848 meters high.';
-    this.processNewTexts();
-  }
-
-  private tryRandomExamples(): void {
-    const examples = [
-      {
-        query: 'How fast do cheetahs run?',
-        doc: 'Cheetahs can reach speeds of up to 70 mph, making them the fastest land animal.'
-      },
-      {
-        query: 'What is photosynthesis?',
-        doc: 'Photosynthesis is the process by which plants convert sunlight into chemical energy using chlorophyll.'
-      },
-      {
-        query: 'When was the internet invented?',
-        doc: 'The internet was developed in the late 1960s as ARPANET, becoming widely available in the 1990s.'
-      },
-      {
-        query: 'What causes ocean tides?',
-        doc: 'Ocean tides are caused by the gravitational pull of the moon and sun on Earth\'s oceans.'
-      }
-    ];
-    
-    const randomExample = examples[Math.floor(Math.random() * examples.length)];
-    this.queryInput.value = randomExample.query;
-    this.documentInput.value = randomExample.doc;
-    this.processNewTexts();
-  }
-
-  private updateComparisonPanel(): void {
-    // Calculate FDE similarity
-    const fdeSimilarity = this.fdeProcessor.calculateSimilarity(
-      this.queryData.fdeVector, 
-      this.docData.fdeVector
-    );
-    
-    // Update similarity score
-    d3.select('#similarity-score').text(fdeSimilarity.toFixed(4));
-    
-    // Update EmbeddingGemma similarity if available
-    if (this.queryEmbedding && this.docEmbedding) {
-      const semanticSimilarity = this.calculateCosineSimilarity(this.queryEmbedding, this.docEmbedding);
-      d3.select('#embedding-similarity').text(`${semanticSimilarity.toFixed(4)} (768D semantic)`);
-      d3.select('#performance-comparison').text(`Hash: ${fdeSimilarity.toFixed(4)} | Semantic: ${semanticSimilarity.toFixed(4)}`);
-    } else {
-      d3.select('#embedding-similarity').text('Not loaded');
-      d3.select('#performance-comparison').text(`Hash: ${fdeSimilarity.toFixed(4)} | Semantic: N/A`);
-    }
-  }
-
-  private calculateCosineSimilarity(vec1: number[], vec2: number[]): number {
-    let dot = 0;
-    let norm1 = 0;
-    let norm2 = 0;
-    
-    for (let i = 0; i < vec1.length; i++) {
-      dot += vec1[i] * vec2[i];
-      norm1 += vec1[i] * vec1[i];
-      norm2 += vec2[i] * vec2[i];
-    }
-    
-    return dot / (Math.sqrt(norm1) * Math.sqrt(norm2));
-  }
-
-  private clearAllAnimations(): void {
-    this.semanticSvg.selectAll('*').remove();
-    this.fdeSvg.selectAll('*').remove();
-    this.bottomSvg.selectAll('*').remove();
-    this.semanticSvgDoc.selectAll('*').remove();
-    this.fdeSvgDoc.selectAll('*').remove();
-    this.bottomSvgDoc.selectAll('*').remove();
-    this.allTokenPositions = [];
-    this.highlightedSectors.clear();
-    this.state.step = 0;
-  }
-
-  private setupInitialView(animationType: 'query' | 'document'): void {
-    const svg = animationType === 'query' ? this.semanticSvg : this.semanticSvgDoc;
-    const textDiv = animationType === 'query' ? this.queryTextDiv : this.queryTextDivDoc;
-    const text = animationType === 'query' ? this.queryText : this.docText;
-    const hyperplanes = animationType === 'query' ? this.queryHyperplanes : this.documentHyperplanes;
-    
-    // Clear previous content
+  private drawPointCloud(
+    selector: string,
+    coords: [number, number][],
+    words: string[],
+    buckets: number[],
+    cfg: FixedDimensionalEncodingConfig,
+    accent: string,
+    tag: string
+  ) {
+    const svg = d3.select(selector);
     svg.selectAll('*').remove();
-    
-    // Set SVG dimensions and background
-    svg.attr('width', 400).attr('height', 400);
-    
-    // Add coordinate system
-    this.addCoordinateSystem(svg, animationType);
-    
-    // Add hyperplanes
-    this.addHyperplanes(svg, hyperplanes, animationType);
-    
-    // Add sector numbers
-    this.addSectorNumbers(svg, hyperplanes);
-    
-    // Display text
-    textDiv.text(text);
-    
-    console.log(`✅ ${animationType} view initialized`);
-  }
+    const w = 420, h = 300, cx = w / 2, cy = h / 2, rad = 115;
 
-  private setupDocumentView(): void {
-    this.setupInitialView('document');
-  }
+    //Axes
+    svg.append('line').attr('x1', 20).attr('y1', cy).attr('x2', w - 20).attr('y2', cy).attr('stroke', '#e2e8f0').attr('stroke-width', 1);
+    svg.append('line').attr('x1', cx).attr('y1', 20).attr('x2', cx).attr('y2', h - 20).attr('stroke', '#e2e8f0').attr('stroke-width', 1);
 
-  private addCoordinateSystem(svg: any, animationType: 'query' | 'document'): void {
-    // Define arrowhead markers
-    const defs = svg.append('defs');
-    
-    defs.append('marker')
-      .attr('id', animationType === 'query' ? 'arrowhead' : 'arrowhead-doc')
-      .attr('viewBox', '-10 -5 10 10')
-      .attr('refX', -5)
-      .attr('refY', 0)
-      .attr('markerWidth', 6)
-      .attr('markerHeight', 6)
-      .attr('orient', 'auto')
-      .append('path')
-      .attr('d', 'M -10,-5 L 0 ,0 L -10,5')
-      .attr('fill', '#666');
-    
-    // X-axis (horizontal)
-    svg.append('line')
-      .attr('x1', 88).attr('y1', 200)
-      .attr('x2', 312).attr('y2', 200)
-      .style('stroke', '#666')
-      .style('stroke-width', 2)
-      .attr('marker-end', animationType === 'query' ? 'url(#arrowhead)' : 'url(#arrowhead-doc)');
-    
-    // Y-axis (vertical) 
-    svg.append('line')
-      .attr('x1', 200).attr('y1', 312)
-      .attr('x2', 200).attr('y2', 88)
-      .style('stroke', '#666')
-      .style('stroke-width', 2)
-      .attr('marker-end', animationType === 'query' ? 'url(#arrowhead)' : 'url(#arrowhead-doc)');
-  }
-
-  private addHyperplanes(svg: any, hyperplanes: number[], animationType: 'query' | 'document'): void {
-    hyperplanes.forEach((angle, index) => {
-      const x1 = 200 - Math.cos(angle) * 140;
-      const y1 = 200 - Math.sin(angle) * 140;
-      const x2 = 200 + Math.cos(angle) * 140;
-      const y2 = 200 + Math.sin(angle) * 140;
-      
+    // Draw shared SimHash hyperplane visual dividers derived deterministically from cfg.seed
+    const angles: number[] = [];
+    for (let k = 0; k < cfg.numSimhashProjections; k++) {
+      angles.push(((cfg.seed * 0.37 + k * 1.05) % Math.PI));
+    }
+    angles.forEach((ang, k) => {
       svg.append('line')
-        .attr('id', `hyperplane-${animationType}-${index}`)
-        .attr('x1', x1).attr('y1', y1)
-        .attr('x2', x2).attr('y2', y2)
-        .style('stroke', '#999')
-        .style('stroke-width', 2)
-        .style('opacity', 0.7);
+        .attr('x1', cx - Math.cos(ang) * 135)
+        .attr('y1', cy - Math.sin(ang) * 135)
+        .attr('x2', cx + Math.cos(ang) * 135)
+        .attr('y2', cy + Math.sin(ang) * 135)
+        .attr('stroke', '#94a3b8')
+        .attr('stroke-dasharray', '4,3')
+        .attr('stroke-width', 1.2)
+        .append('title').text(`Shared SimHash Hyperplane H${k + 1}`);
     });
-  }
 
-  private addSectorNumbers(svg: any, hyperplanes: number[]): void {
-    const numSectors = Math.pow(2, hyperplanes.length);
-    
-    for (let sector = 0; sector < numSectors; sector++) {
-      const angle = (sector * 2 * Math.PI) / numSectors + Math.PI / numSectors;
-      const radius = 60;
-      const x = 200 + Math.cos(angle) * radius;
-      const y = 200 - Math.sin(angle) * radius;
-      
-      svg.append('text')
-        .attr('id', `sector-${sector}`)
-        .attr('x', x).attr('y', y)
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'central')
-        .style('font-size', '16px')
-        .style('font-weight', 'bold')
-        .style('fill', '#666')
-        .text(sector);
-    }
-  }
+    svg.append('text')
+      .attr('x', 12).attr('y', 18)
+      .style('font-size', '11px').style('fill', '#64748b').style('font-weight', '600')
+      .text(`${tag} Shared PCA + Halfspaces (seed=${cfg.seed})`);
 
-  private setupPauseButton(): void {
-    const pauseBtn = d3.select('#pause-btn');
-    pauseBtn.on('click', () => {
-      this.state.isPaused = !this.state.isPaused;
-      pauseBtn.text(this.state.isPaused ? '▶' : '⏸');
-      
-      if (!this.state.isPaused) {
-        this.continueAnimation();
+    const palette = d3.schemeTableau10;
+    coords.forEach(([px, py], i) => {
+      const x = cx + px * rad;
+      const y = cy - py * rad;
+      const bucket = buckets[i] ?? 0;
+      const col = palette[bucket % palette.length] || accent;
+
+      const c = svg.append('circle')
+        .attr('cx', x).attr('cy', y)
+        .attr('r', 7)
+        .attr('fill', col)
+        .attr('stroke', '#0f172a')
+        .attr('stroke-width', 1.2);
+      if (this.pulseEnabled) {
+        c.attr('opacity', 0.85);
       }
+      svg.append('text')
+        .attr('x', x + 9).attr('y', y + 4)
+        .style('font-size', '11px')
+        .style('font-weight', '600')
+        .style('fill', '#0f172a')
+        .text(`${words[i]} [${bucket}]`);
     });
   }
 
-  private startAnimation(): void {
-    this.state.isRunning = true;
-    this.state.step = 0;
-    this.animateStep();
-  }
+  private drawPartitionBars(selector: string, parts: FDEResult['rep0Partitions'], accent: string, modeLabel: string) {
+    const svg = d3.select(selector);
+    svg.selectAll('*').remove();
+    const w = 420, h = 170, padL = 36, padB = 34, padT = 22, padR = 14;
+    const innerW = w - padL - padR;
+    const innerH = h - padT - padB;
 
-  private continueAnimation(): void {
-    if (this.state.isRunning && !this.state.isPaused) {
-      setTimeout(() => this.animateStep(), 100);
-    }
-  }
+    const maxNorm = Math.max(0.01, ...parts.map(p => p.norm));
+    const barW = innerW / parts.length;
 
-  private animateStep(): void {
-    if (this.state.isPaused || !this.state.isRunning) return;
-    
-    // Simulate animation steps for both query and document
-    this.animateQueryStep();
-    this.animateDocumentStep();
-    
-    this.state.step++;
-    
-    // Continue animation
-    if (this.state.step < 50) { // Arbitrary animation length
-      setTimeout(() => this.animateStep(), 2000);
-    }
-  }
+    parts.forEach((p, idx) => {
+      const barH = (p.norm / maxNorm) * innerH;
+      const x = padL + idx * barW + 3;
+      const y = padT + (innerH - barH);
+      const fill = p.count > 0 ? accent : (p.filledByNearest ? '#f59e0b' : '#e2e8f0');
 
-  private animateQueryStep(): void {
-    // Add token animations, sector highlighting, etc.
-    const words = this.queryData.words;
-    if (this.state.step < words.length) {
-      this.addAnimatedToken(this.semanticSvg, words[this.state.step], this.state.step, 'query');
-    }
-  }
+      svg.append('rect')
+        .attr('x', x)
+        .attr('y', y)
+        .attr('width', Math.max(8, barW - 6))
+        .attr('height', Math.max(2, barH))
+        .attr('rx', 3)
+        .attr('fill', fill)
+        .append('title')
+        .text(`Bucket ${p.partitionId}: count=${p.count}${p.filledByNearest ? ' (nearest-filled)' : ''}, norm=${p.norm.toFixed(3)}, tokens=[${p.tokens.join(', ')}]`);
 
-  private animateDocumentStep(): void {
-    // Add token animations, sector highlighting, etc.
-    const words = this.docData.words;
-    if (this.state.step < words.length) {
-      this.addAnimatedToken(this.semanticSvgDoc, words[this.state.step], this.state.step, 'document');
-    }
-  }
+      svg.append('text')
+        .attr('x', x + Math.max(8, barW - 6) / 2)
+        .attr('y', h - 16)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '10px')
+        .style('fill', '#334155')
+        .text(`B${p.partitionId}`);
 
-  private setupCollapsibleMathSection(): void {
-    const mathToggle = d3.select('#math-toggle');
-    const mathContent = d3.select('#math-content');
-    const toggleArrow = mathToggle.select('span');
-    
-    mathToggle.on('click', () => {
-      const isVisible = mathContent.style('display') === 'block';
-      mathContent.style('display', isVisible ? 'none' : 'block');
-      toggleArrow.text(isVisible ? '▼' : '▲');
+      svg.append('text')
+        .attr('x', x + Math.max(8, barW - 6) / 2)
+        .attr('y', h - 4)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '9px')
+        .style('fill', p.filledByNearest ? '#b45309' : '#64748b')
+        .text(p.count > 0 ? `n=${p.count}` : (p.filledByNearest ? 'fill' : '0'));
     });
+
+    svg.append('text')
+      .attr('x', 8).attr('y', 14)
+      .style('font-size', '10.5px').style('font-weight', '600').style('fill', '#475569')
+      .text(`Rep 1 Block Norms (${modeLabel}; amber = filled empty bucket)`);
   }
 
-  private async handleFileUpload(): Promise<void> {
-    const files = this.documentFilesInput.files;
-    if (!files || files.length === 0) return;
-    
-    console.log(`📁 Processing ${files.length} uploaded files...`);
-    
-    const fileStatus = d3.select('#file-status');
-    fileStatus.style('display', 'block').text(`Processing ${files.length} files...`);
-    
-    const documents: string[] = [];
-    
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const text = await file.text();
-      documents.push(text.trim());
+  private drawFdeHeatmap(selector: string, fde: FDEResult, accent: string) {
+    const svg = d3.select(selector);
+    svg.selectAll('*').remove();
+    const w = 420, h = 90;
+    const vec = fde.repetitions[0] || [];
+    const bins = Math.min(96, vec.length);
+    if (!bins) return;
+    const cellW = (w - 20) / bins;
+    let maxAbs = 1e-3;
+    for (let i = 0; i < bins; i++) maxAbs = Math.max(maxAbs, Math.abs(vec[i]));
+
+    for (let i = 0; i < bins; i++) {
+      const val = vec[i];
+      const mag = Math.min(1, Math.abs(val) / maxAbs);
+      svg.append('rect')
+        .attr('x', 10 + i * cellW)
+        .attr('y', 24)
+        .attr('width', Math.max(1.5, cellW - 0.3))
+        .attr('height', 42)
+        .attr('fill', val >= 0 ? accent : '#dc2626')
+        .attr('fill-opacity', 0.12 + 0.88 * mag);
     }
-    
-    // Update textarea with file contents
-    this.documentCollectionTextarea.value = documents.join('\n');
-    
-    fileStatus.text(`✅ Loaded ${files.length} files (${documents.length} documents)`);
-    
-    console.log(`✅ Loaded ${documents.length} documents from files`);
+    svg.append('text')
+      .attr('x', 10).attr('y', 16)
+      .style('font-size', '10.5px').style('fill', '#475569').style('font-weight', '600')
+      .text(`Rep 1 Packed Coordinates (${vec.length} floats; blue/green >= 0, red < 0)`);
   }
 
-  private loadDefaultDocuments(): void {
-    console.log('📚 Loading default documents...');
-    
-    const defaultDocs = [
-      'Mount Everest is 8,848 meters high, making it the tallest mountain on Earth.',
-      'The Pacific Ocean is the largest ocean, covering about one-third of Earth\'s surface.',
-      'Photosynthesis is the process by which plants convert sunlight into chemical energy.',
-      'The speed of light in a vacuum is approximately 299,792,458 meters per second.',
-      'DNA contains the genetic instructions for all living organisms.',
-      'The Great Wall of China stretches over 13,000 miles across northern China.',
-      'The human brain contains approximately 86 billion neurons.',
-      'Water covers about 71% of Earth\'s surface.',
-      'The Amazon rainforest produces about 20% of the world\'s oxygen.',
-      'Quantum mechanics describes the behavior of matter at the atomic scale.'
-    ];
-    
-    this.documentCollectionTextarea.value = defaultDocs.join('\n');
-    
-    d3.select('#file-status').style('display', 'block').text('✅ Loaded 10 default documents');
-    
-    // Auto-process if model is loaded
-    if (this.modelLoaded) {
-      setTimeout(() => {
-        this.processDocumentCollection();
-      }, 500);
-    }
-  }
+  private runCollectionBenchmark() {
+    const queryText = (document.getElementById('search-query') as HTMLInputElement).value.trim() || PRESET_PAIRS[0].query;
+    const docsRaw = (document.getElementById('document-collection') as HTMLTextAreaElement).value;
+    const docs = docsRaw.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!docs.length) return;
 
-  private clearAllDocuments(): void {
-    this.documentCollectionTextarea.value = '';
-    this.documentFilesInput.value = '';
-    d3.select('#file-status').style('display', 'none');
-    this.clearDocumentCollection();
-  }
-
-  private updatePerformanceMetrics(loadTime: number): void {
-    const metricsDiv = d3.select('#performance-metrics pre');
-    
-    const metrics = `
-🔧 Model Loading Performance:
-   • EmbeddingGemma load time: ${(loadTime/1000).toFixed(2)}s
-   • Model size: ~160MB (ONNX format)
-   • Embedding dimension: 768D
-   • Parameters: 308M
-   • Device: ${this.productionEmbeddingGemma ? 'WebGPU/WASM' : 'Fallback'}
-
-📊 Processing Performance:
-   • Documents processed: ${this.processedDocumentsCount}
-   • Total embeddings: ${this.documentEmbeddings.length}
-   • Average processing time: ~1s per document
-   • Memory usage: ~200MB
-
-🎯 Algorithm Efficiency:
-   • Latency reduction: Up to 90% (MuVeRa FDE)
-   • Recall maintenance: >95% quality
-   • Compression ratio: 768D → Fixed FDE size
-   • Search complexity: O(1) vs O(n)
-    `.trim();
-    
-    metricsDiv.text(metrics);
-  }
-
-  private updateFDECalculations(): void {
-    const calcDiv = d3.select('#fde-calculations pre');
-    
-    if (!this.queryData || !this.docData) {
-      calcDiv.text('Waiting for document processing...');
+    const modelId = (document.getElementById('muvera-model-select') as HTMLSelectElement).value as MuveraModelId;
+    if (modelId === 'deterministic') {
+      const qEnc = deterministicEncode(queryText, 64);
+      const dEncs = docs.map(d => deterministicEncode(d, 64));
+      this.renderBenchmarkTable(qEnc, dEncs);
       return;
     }
-    
-    const queryFDE = this.queryData.fdeVector;
-    const docFDE = this.docData.fdeVector;
-    const similarity = this.fdeProcessor.calculateSimilarity(queryFDE, docFDE);
-    
-    const calculations = `
-📊 MULTI-VECTOR TO FDE TRANSFORMATION:
 
-1. Input Processing:
-   Query: "${this.queryText.substring(0, 50)}..."
-   Document: "${this.docText.substring(0, 50)}..."
-
-2. Multi-Vector Generation:
-   Query tokens: ${this.queryText.split(' ').length} words → ${this.queryText.split(' ').length} vectors
-   Document tokens: ${this.docText.split(' ').length} words → ${this.docText.split(' ').length} vectors
-
-3. FDE Encoding:
-   Query FDE: [${queryFDE.map(v => v.toFixed(3)).join(', ')}]
-   Doc FDE: [${docFDE.map(v => v.toFixed(3)).join(', ')}]
-
-4. Similarity Computation:
-   Dot product: ${queryFDE.map((v, i) => v * docFDE[i]).reduce((a, b) => a + b, 0).toFixed(4)}
-   Query norm: ${Math.sqrt(queryFDE.map(v => v * v).reduce((a, b) => a + b, 0)).toFixed(4)}
-   Doc norm: ${Math.sqrt(docFDE.map(v => v * v).reduce((a, b) => a + b, 0)).toFixed(4)}
-   Cosine similarity: ${similarity.toFixed(4)}
-
-5. Compression Analysis:
-   Original dimensions: ${(this.queryText.split(' ').length + this.docText.split(' ').length) * 768}
-   FDE dimensions: ${queryFDE.length * 2}
-   Compression ratio: ${((this.queryText.split(' ').length + this.docText.split(' ').length) * 768 / (queryFDE.length * 2)).toFixed(1)}x
-    `.trim();
-    
-    calcDiv.text(calculations);
+    this.ensureWorker();
+    this.benchReqId++;
+    this.setStatus(`Encoding ${docs.length} documents with ${modelId}...`);
+    this.worker!.postMessage({
+      type: 'encode_collection',
+      data: { requestId: this.benchReqId, modelId, queryText, docs }
+    });
   }
 
-  private addAnimatedToken(svg: any, word: string, index: number, type: 'query' | 'document'): void {
-    // Simple token placement animation
-    const angle = (index * 2 * Math.PI) / 8 + Math.PI / 8;
-    const radius = 80 + (index % 3) * 20;
-    const x = 200 + Math.cos(angle) * radius;
-    const y = 200 - Math.sin(angle) * radius;
-    
-    const color = this.colors[index % this.colors.length];
-    
-    // Add token circle
-    svg.append('circle')
-      .attr('cx', x).attr('cy', y)
-      .attr('r', 0)
-      .style('fill', color)
-      .style('opacity', 0.7)
-      .transition(d3.transition().duration(1000))
-      .attr('r', 15);
-    
-    // Add token text
-    svg.append('text')
-      .attr('x', x).attr('y', y)
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'central')
-      .style('font-size', '10px')
-      .style('font-weight', 'bold')
-      .style('fill', 'white')
-      .style('opacity', 0)
-      .text(word.substring(0, 3))
-      .transition(d3.transition().delay(500).duration(500))
-      .style('opacity', 1);
+  private renderBenchmarkTable(query: EncodedText, docs: EncodedText[]) {
+    const container = document.getElementById('search-results');
+    if (!container) return;
+    const topK = parseInt((document.getElementById('top-k-results') as HTMLSelectElement).value, 10) || 5;
+    const cfg = this.getConfig(query.dimension);
+    const qFde = computeFDE(query.tokenVectors, query.words, cfg, EncodingType.DEFAULT_SUM);
+
+    const rows = docs.map((d, idx) => {
+      const dFde = computeFDE(d.tokenVectors, d.words, cfg, EncodingType.AVERAGE);
+      const chamfer = computeChamferSimilarity(query.tokenVectors, d.tokenVectors, cfg.dimension);
+      const fdeEst = computeFDEEstimate(qFde.fdeVector, dFde.fdeVector, cfg.numRepetitions, query.words.length);
+      const single = cosineSim(query.sentenceVector, d.sentenceVector);
+      return {
+        idx,
+        text: d.words.join(' '),
+        chamferSum: chamfer.chamferSum,
+        fdeSum: fdeEst.fdeSumApprox,
+        singleCos: single,
+        docObj: d
+      };
+    });
+
+    rows.sort((a, b) => b.fdeSum - a.fdeSum);
+    const topRows = rows.slice(0, topK);
+
+    let html = `<table class="bench-table"><thead><tr>
+      <th>Rank (MUVERA FDE)</th>
+      <th>Document</th>
+      <th>Exact Chamfer</th>
+      <th>MUVERA (1/R)&langle;F<sub>q</sub>,F<sub>d</sub>&rangle;</th>
+      <th>Single-Vector Cos</th>
+    </tr></thead><tbody>`;
+    topRows.forEach((r, rank) => {
+      html += `<tr class="${rank === 0 ? 'top-hit' : ''}">
+        <td><strong>#${rank + 1}</strong></td>
+        <td>${r.text.replace(/</g, '&lt;')}</td>
+        <td>${r.chamferSum.toFixed(3)}</td>
+        <td><strong>${r.fdeSum.toFixed(3)}</strong></td>
+        <td>${r.singleCos.toFixed(3)}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+    if (topRows.length) {
+      this.lastPair = {
+        query,
+        doc: topRows[0].docObj,
+        backend: this.lastPair?.backend || 'wasm',
+        modelId: this.lastPair?.modelId || 'all-MiniLM-L6-v2'
+      };
+      (document.getElementById('query-input') as HTMLInputElement).value = query.words.join(' ');
+      (document.getElementById('document-input') as HTMLInputElement).value = topRows[0].docObj.words.join(' ');
+      this.renderFromCachedPair();
+    }
   }
 }
 
-// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🎬 Starting MuVeRa Animation + EmbeddingGemma...');
-  new MuVeRaAnimation();
+  new MuVeRaVisualizer();
 });
-
-// Export for module use
-export { MuVeRaAnimation };

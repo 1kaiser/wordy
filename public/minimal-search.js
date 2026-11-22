@@ -1,834 +1,512 @@
 /**
- * Minimal WordNet Search - V2
- * Word boxing on space/punctuation, hover alternatives like ThinkingMachines
+ * Wordy Minimal Explorer (WordNet 3.1 + D3 v7 Lexical Graph + Opt-In Neural Reranker / Dense Worker)
  */
-
 const { createApp } = Vue;
+
+const rerankerWorkerCode = `
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js';
+env.allowLocalModels = false;
+env.allowRemoteModels = true;
+env.useBrowserCache = true;
+
+let extractor = null;
+
+function cosine(a, b) {
+    let dot = 0, na = 0, nb = 0;
+    for (let i = 0; i < a.length; i++) {
+        dot += a[i] * b[i];
+        na += a[i] * a[i];
+        nb += b[i] * b[i];
+    }
+    const denom = Math.sqrt(na) * Math.sqrt(nb);
+    return denom > 0 ? dot / denom : 0;
+}
+
+self.addEventListener('message', async (e) => {
+    const { type, data } = e.data;
+    if (type === 'init') {
+        try {
+            const fileProgress = new Map();
+            extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+                device: 'wasm',
+                dtype: 'q8',
+                progress_callback: (p) => {
+                    if (!p || !p.file) return;
+                    if (p.status === 'progress') fileProgress.set(p.file, { loaded: p.loaded || 0, total: p.total || 0 });
+                    else if (p.status === 'done') {
+                        const prev = fileProgress.get(p.file);
+                        if (prev && prev.total) fileProgress.set(p.file, { loaded: prev.total, total: prev.total });
+                    } else return;
+                    let loaded = 0, total = 0;
+                    for (const v of fileProgress.values()) { loaded += v.loaded; total += v.total; }
+                    const percent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+                    self.postMessage({ type: 'progress', data: { percent } });
+                }
+            });
+            self.postMessage({ type: 'ready' });
+        } catch (err) {
+            self.postMessage({ type: 'error', data: (err && err.message) || String(err) });
+        }
+    } else if (type === 'score') {
+        if (!extractor) return;
+        const { requestId, anchorText, candidates } = data;
+        if (!candidates.length) {
+            self.postMessage({ type: 'scored', data: { requestId, scores: {} } });
+            return;
+        }
+        try {
+            const inputs = [anchorText, ...candidates.map(c => c.text)];
+            const out = await extractor(inputs, { pooling: 'mean', normalize: true });
+            const [n, dim] = out.dims.map(Number);
+            const raw = out.data;
+            const qVec = raw.slice(0, dim);
+            const scores = {};
+            for (let i = 1; i < n; i++) {
+                scores[candidates[i - 1].word] = cosine(qVec, raw.subarray(i * dim, (i + 1) * dim));
+            }
+            self.postMessage({ type: 'scored', data: { requestId, scores } });
+        } catch (err) {
+            self.postMessage({ type: 'error', data: (err && err.message) || String(err) });
+        }
+    }
+});
+`;
+
+const denseSearchWorkerCode = `
+let corpusWords = null;
+let corpusEmbeddings = null;
+const DIM = 768;
+
+self.addEventListener('message', (e) => {
+    const { type, data } = e.data;
+    if (type === 'set_corpus') {
+        corpusWords = data.words;
+        corpusEmbeddings = data.embeddings;
+        self.postMessage({ type: 'corpus_ready', data: { count: corpusWords.length } });
+    } else if (type === 'search') {
+        if (!corpusWords || !corpusEmbeddings) return;
+        const idx = corpusWords.indexOf(data.word);
+        if (idx === -1) {
+            self.postMessage({ type: 'dense_results', data: { word: data.word, results: [] } });
+            return;
+        }
+        const qBase = idx * DIM;
+        let qNorm = 0;
+        for (let d = 0; d < DIM; d++) {
+            const v = corpusEmbeddings[qBase + d];
+            qNorm += v * v;
+        }
+        qNorm = Math.sqrt(qNorm) || 1;
+
+        const topK = [];
+        const total = corpusWords.length;
+        for (let i = 0; i < total; i++) {
+            if (i === idx) continue;
+            const cBase = i * DIM;
+            let dot = 0, cNorm = 0;
+            for (let d = 0; d < DIM; d++) {
+                const cv = corpusEmbeddings[cBase + d];
+                dot += corpusEmbeddings[qBase + d] * cv;
+                cNorm += cv * cv;
+            }
+            const sim = dot / (qNorm * (Math.sqrt(cNorm) || 1));
+            if (topK.length < 8 || sim > topK[topK.length - 1].similarity) {
+                topK.push({ word: corpusWords[i], similarity: sim });
+                topK.sort((a, b) => b.similarity - a.similarity);
+                if (topK.length > 8) topK.pop();
+            }
+        }
+        self.postMessage({ type: 'dense_results', data: { word: data.word, results: topK } });
+    }
+});
+`;
 
 createApp({
     data() {
         return {
             inputText: '',
             words: [],
-            currentWord: '',  // Word being typed
-            selectedWord: null,
-            alternatives: [],
-            corpusData: {
-                words: [],
-                embeddings: null
-            },
-            corpusReady: false,
-            searchCache: new Map(),
-            processingWords: new Set(),  // Track words being searched
-            hoveredWord: null,
+            selectedIdx: null,
+            lexicon: null,
+            lexiconStatus: 'Loading WordNet 3.1...',
+            sampleSentences: [
+                'The ephemeral ocean sunrise',
+                'Serendipity reveals quintessential patterns',
+                'Fast neural graph intelligence'
+            ],
+            rerankerWorker: null,
+            rerankerBusy: false,
+            rerankerReady: false,
+            rerankerProgressText: 'Loading...',
+            rerankScores: {},
+            rerankSeq: 0,
+            denseWorker: null,
+            denseBusy: false,
+            denseReady: false,
+            denseProgressText: 'Downloading...',
+            denseNeighbors: [],
             copySuccess: false,
-            renderDebounceTimer: null,  // Debounce re-renders during batch search
-            searchDelay: 500,  // Delay in ms before starting VoY search (configurable)
-            // Speech recognition
-            recognition: null,
             speechSupported: false,
             isRecording: false,
-            recordingStatus: 'Listening...'
+            recognition: null
         };
     },
 
+    computed: {
+        activeWord() {
+            if (this.selectedIdx === null || !this.words[this.selectedIdx]) return null;
+            return this.words[this.selectedIdx];
+        },
+
+        rankedAlternatives() {
+            const active = this.activeWord;
+            if (!active || !active.entry) {
+                return { synonyms: [], broader: [], narrower: [], antonyms: [] };
+            }
+            const scoreFor = (w) => (typeof this.rerankScores[w] === 'number' ? this.rerankScores[w] : null);
+            const mapList = (arr) => {
+                const items = (arr || []).map(w => ({ word: w, score: scoreFor(w) }));
+                if (this.rerankerReady) {
+                    items.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+                }
+                return items;
+            };
+            return {
+                synonyms: mapList(active.entry.s),
+                broader: mapList(active.entry.h),
+                narrower: mapList(active.entry.y),
+                antonyms: mapList(active.entry.a)
+            };
+        }
+    },
+
     mounted() {
-        this.loadCorpus();
-        this.initD3();
+        this.loadLexicon();
         this.initSpeechRecognition();
-
-        // Global ESC key handler
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.clearAll();
-            }
-        });
-
-        // Click anywhere to hide alternatives
-        window.addEventListener('click', (e) => {
-            if (this.hoveredWord && !e.target.closest('.word-box') && !e.target.closest('.alt-box')) {
-                this.hideAlternatives();
-            }
+        window.addEventListener('beforeunload', () => {
+            if (this.rerankerWorker) this.rerankerWorker.terminate();
+            if (this.denseWorker) this.denseWorker.terminate();
         });
     },
 
     methods: {
-        async loadCorpus() {
+        async loadLexicon() {
             try {
-                const metadataRes = await fetch('corpus-metadata.json');
-                const metadata = await metadataRes.json();
-
-                const embeddingsRes = await fetch('corpus-embeddings.bin');
-                const buffer = await embeddingsRes.arrayBuffer();
-                const embeddings = new Float32Array(buffer);
-
-                this.corpusData = {
-                    words: metadata.words,
-                    embeddings: embeddings
-                };
-
-                this.corpusReady = true;
-
-                // Focus input when ready
-                setTimeout(() => {
-                    document.getElementById('text-input').focus();
-                }, 300);
-
-                console.log(`✅ Loaded ${metadata.words.length} words - Ready!`);
-            } catch (error) {
-                console.error('❌ Error loading corpus:', error);
-                // Still enable interaction even if corpus fails to load
-                this.corpusReady = true;
-
-                // Focus input when ready
-                setTimeout(() => {
-                    document.getElementById('text-input').focus();
-                }, 300);
+                const res = await fetch('./wordnet-lexicon.json');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                this.lexicon = data.entries || {};
+                this.lexiconStatus = `WordNet 3.1 Ready (${Object.keys(this.lexicon).length.toLocaleString()} lemmas)`;
+            } catch (err) {
+                console.error('Failed to load WordNet lexicon:', err);
+                this.lexicon = {};
+                this.lexiconStatus = 'WordNet Lexicon Offline';
             }
         },
 
-        initD3() {
-            this.svg = d3.select('#main-svg');
-            this.wordGroup = this.svg.append('g').attr('id', 'word-group');
-            this.altGroup = this.svg.append('g').attr('id', 'alternatives-group');
+        lookupWord(rawWord) {
+            const clean = String(rawWord || '').toLowerCase().replace(/^[^a-z]+|[^a-z'-]+$/g, '');
+            if (!clean) return null;
+            const entry = (this.lexicon && this.lexicon[clean]) || null;
+            return { word: clean, entry };
+        },
+
+        appendWordsFromText(text) {
+            const tokens = String(text || '').split(/[\s,.;:!?()\[\]"]+/).filter(Boolean);
+            let added = false;
+            for (const tok of tokens) {
+                const item = this.lookupWord(tok);
+                if (!item) continue;
+                if (!this.words.some(w => w.word === item.word)) {
+                    this.words.push(item);
+                    added = true;
+                }
+            }
+            if (added && this.selectedIdx === null) {
+                const firstKnown = this.words.findIndex(w => w.entry);
+                if (firstKnown !== -1) this.selectWord(firstKnown);
+            }
         },
 
         handleKeydown(e) {
-            if (!this.corpusReady) {
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            if (e.key === ' ' || e.key === 'Enter' || /^[.,!?;:]$/.test(e.key)) {
+                if (this.inputText.trim()) {
+                    e.preventDefault();
+                    this.commitInputText();
+                }
+            } else if (e.key === 'Backspace' && !this.inputText && this.words.length) {
                 e.preventDefault();
-                return;
-            }
-
-            // Box word on Space, Enter, or punctuation
-            if (e.key === ' ' || e.key === 'Enter' || /[.,!?;:]/.test(e.key)) {
-                e.preventDefault();  // Prevent default to avoid space character in input
-
-                const word = this.currentWord.trim().toLowerCase().replace(/[^a-z]/g, '');
-
-                if (word.length > 0 && !this.words.includes(word)) {
-                    this.words.push(word);
-
-                    // Render box IMMEDIATELY
-                    this.renderWordBoxes();
-
-                    // Start search in background with visual indicator (non-blocking)
-                    if (this.corpusData.words.includes(word) && !this.searchCache.has(word)) {
-                        setTimeout(() => this.searchWordWithIndicator(word), 0);
-                    }
+                this.words.pop();
+                if (this.selectedIdx !== null && this.selectedIdx >= this.words.length) {
+                    this.selectedIdx = this.words.length ? this.words.length - 1 : null;
                 }
-
-                this.currentWord = '';
-                this.inputText = '';  // Clear input text
-            } else if (e.key === 'Backspace') {
-                e.preventDefault();  // Prevent default backspace behavior
-
-                // Handle backspace
-                if (this.currentWord.length === 0 && this.words.length > 0) {
-                    this.words.pop();
-                    this.renderWordBoxes();
-                } else {
-                    this.currentWord = this.currentWord.slice(0, -1);
-                    this.inputText = this.currentWord;  // Update input to show current word
-                }
-            } else if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
-                e.preventDefault();  // Prevent default to avoid duplicate character
-
-                // Add letter to current word
-                this.currentWord += e.key.toLowerCase();
-                this.inputText = this.currentWord;  // Update input to show what's being typed
+                this.$nextTick(() => this.renderLexicalGraph());
+            } else if (e.key === 'Escape') {
+                this.clearAll();
             }
         },
 
         handlePaste(e) {
-            if (!this.corpusReady) {
-                e.preventDefault();
-                return;
-            }
-
+            const pasted = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+            if (!pasted.trim()) return;
             e.preventDefault();
-
-            // Get pasted text
-            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
-
-            // Parse into words (split by spaces and punctuation)
-            const pastedWords = pastedText
-                .toLowerCase()
-                .split(/[\s.,!?;:]+/)
-                .map(w => w.replace(/[^a-z]/g, ''))
-                .filter(w => w.length > 0);
-
-            // Add unique words (accumulative - supports multiple pastes)
-            const newWords = [];
-            pastedWords.forEach(word => {
-                if (!this.words.includes(word)) {
-                    this.words.push(word);
-                    newWords.push(word);
-                }
-            });
-
-            // Update input text
-            this.inputText = this.words.join(' ');
-            this.currentWord = '';
-
-            // Render word boxes IMMEDIATELY (no debounce for paste)
-            this.renderWordBoxes();
-
-            // Launch parallel searches for all valid words that need searching
-            // Do this AFTER rendering so boxes appear instantly
-            const validWords = this.words.filter(w =>
-                this.corpusData.words.includes(w) && !this.searchCache.has(w)
-            );
-
-            console.log(`📋 Pasted ${pastedWords.length} words (${newWords.length} new), ${validWords.length} need searching`);
-
-            // Search with visual feedback - happens in background
-            setTimeout(() => {
-                validWords.forEach(word => this.searchWordWithIndicator(word));
-            }, 0);
+            const combined = (this.inputText + ' ' + pasted).trim();
+            this.inputText = '';
+            this.appendWordsFromText(combined);
         },
 
-        // Debounced render for batch updates
-        renderWordBoxesDebounced() {
-            if (this.renderDebounceTimer) {
-                clearTimeout(this.renderDebounceTimer);
-            }
-            this.renderDebounceTimer = setTimeout(() => {
-                this.renderWordBoxes();
-                this.renderDebounceTimer = null;
-            }, 50);  // 50ms debounce
+        commitInputText() {
+            if (!this.inputText.trim()) return;
+            this.appendWordsFromText(this.inputText);
+            this.inputText = '';
         },
 
-        renderWordBoxes() {
-            if (this.words.length === 0) {
-                this.wordGroup.selectAll('.word-box').remove();
-                this.altGroup.selectAll('.alt-box').remove();
-                return;
+        loadSample(sentence) {
+            this.words = [];
+            this.selectedIdx = null;
+            this.inputText = '';
+            this.appendWordsFromText(sentence);
+        },
+
+        selectWord(idx) {
+            this.selectedIdx = idx;
+            this.rerankScores = {};
+            this.denseNeighbors = [];
+            this.$nextTick(() => this.renderLexicalGraph());
+            if (this.rerankerReady) this.runNeuralRerank();
+            if (this.denseReady && this.words[idx]) {
+                this.denseWorker.postMessage({ type: 'search', data: { word: this.words[idx].word } });
             }
+        },
 
-            const svgWidth = window.innerWidth;
-            const svgHeight = window.innerHeight;
-            const boxHeight = 30;
-            const boxGap = 8;
-            const rowGap = 10;
-            const padding = 16;
-            const fontSize = 16;
-            const maxWidth = svgWidth * 0.9; // Use 90% of viewport width
+        replaceSelectedWord(newWord) {
+            if (this.selectedIdx === null || !this.words[this.selectedIdx]) return;
+            const updated = this.lookupWord(newWord);
+            if (!updated) return;
+            this.words.splice(this.selectedIdx, 1, updated);
+            this.selectWord(this.selectedIdx);
+        },
 
-            // Calculate word data
-            const wordData = this.words.map(word => {
-                const isInCorpus = this.corpusData.words.includes(word);
-                const textWidth = this.measureText(word, fontSize);
-                const boxWidth = textWidth + (padding * 2);
+        renderLexicalGraph() {
+            const svg = d3.select('#lexical-graph-svg');
+            if (svg.empty()) return;
+            svg.selectAll('*').remove();
 
-                return {
-                    word,
-                    width: boxWidth,
-                    height: boxHeight,
-                    isInCorpus
-                };
-            });
+            const active = this.activeWord;
+            if (!active || !active.entry) return;
 
-            // Layout words into rows
-            const rows = [];
-            let currentRow = [];
-            let currentRowWidth = 0;
+            const width = svg.node().clientWidth || 460;
+            const height = 290;
+            const cx = width / 2;
+            const cy = height / 2;
 
-            wordData.forEach(wordBox => {
-                const boxTotalWidth = wordBox.width + boxGap;
-
-                // Check if adding this box would exceed max width
-                if (currentRowWidth + boxTotalWidth > maxWidth && currentRow.length > 0) {
-                    // Start new row
-                    rows.push(currentRow);
-                    currentRow = [wordBox];
-                    currentRowWidth = boxTotalWidth;
-                } else {
-                    // Add to current row
-                    currentRow.push(wordBox);
-                    currentRowWidth += boxTotalWidth;
-                }
-            });
-
-            // Add last row
-            if (currentRow.length > 0) {
-                rows.push(currentRow);
-            }
-
-            // Calculate total height needed
-            const totalHeight = rows.length * boxHeight + (rows.length - 1) * rowGap;
-
-            // Position boxes centered, starting from top of centered block
-            const startY = (svgHeight - totalHeight) / 2;
-            let currentY = startY;
-
-            rows.forEach(row => {
-                // Calculate row width
-                const rowWidth = row.reduce((sum, box) => sum + box.width + boxGap, 0) - boxGap;
-
-                // Center this row horizontally
-                let currentX = (svgWidth - rowWidth) / 2;
-
-                row.forEach(d => {
-                    d.x = currentX;
-                    d.y = currentY;
-                    currentX += d.width + boxGap;
+            const neighbors = [];
+            const addGroup = (arr, rel, color) => {
+                (arr || []).slice(0, 4).forEach(w => {
+                    if (!neighbors.some(n => n.word === w)) neighbors.push({ word: w, rel, color });
                 });
+            };
+            addGroup(active.entry.s, 'Synonym', '#2563eb');
+            addGroup(active.entry.h, 'Broader', '#059669');
+            addGroup(active.entry.y, 'Narrower', '#7c3aed');
+            addGroup(active.entry.a, 'Antonym', '#dc2626');
 
-                currentY += boxHeight + rowGap;
+            const nodes = neighbors.slice(0, 12).map((n, idx, all) => {
+                const angle = (idx / Math.max(1, all.length)) * Math.PI * 2 - Math.PI / 2;
+                const rx = Math.min(cx - 56, 155);
+                const ry = Math.min(cy - 34, 102);
+                return { ...n, x: cx + Math.cos(angle) * rx, y: cy + Math.sin(angle) * ry };
             });
 
-            // D3 data binding
-            const boxes = this.wordGroup
-                .selectAll('.word-box')
-                .data(wordData, d => d.word);
+            svg.selectAll('line.lex-edge')
+                .data(nodes)
+                .enter()
+                .append('line')
+                .attr('class', 'lex-edge')
+                .attr('x1', cx)
+                .attr('y1', cy)
+                .attr('x2', d => d.x)
+                .attr('y2', d => d.y)
+                .attr('stroke', d => d.color)
+                .attr('stroke-opacity', 0.45)
+                .attr('stroke-width', 1.6);
 
-            boxes.exit()
-                .transition()
-                .duration(150)  // Reduced from 300ms for snappier UX
-                .style('opacity', 0)
-                .remove();
-
-            const enter = boxes.enter()
-                .append('g')
-                .attr('class', d => {
-                    let classes = 'word-box';
-                    if (!d.isInCorpus) classes += ' disabled';
-                    if (d.word === this.selectedWord) classes += ' selected';
-                    // Add darker border for words with cached alternatives
-                    if (d.isInCorpus && this.searchCache.has(d.word)) classes += ' has-alternatives';
-                    // Add processing class for words being searched
-                    if (this.processingWords.has(d.word)) classes += ' processing';
-                    return classes;
-                })
-                .attr('data-word', d => d.word)
-                .style('opacity', 0);
-
-            enter.append('rect')
-                .attr('width', d => d.width)
-                .attr('height', d => d.height)
-                .attr('rx', 2)
-                .attr('fill', '#fff')
-                .attr('stroke', d => d.word === this.selectedWord ? '#e9411b' : '#000')
-                .attr('stroke-opacity', d => {
-                    if (d.word === this.selectedWord) return 0.8;
-                    if (this.searchCache.has(d.word)) return 0.4;  // Darker for searched words
-                    return 0.16;  // Light for unsearched words
-                })
-                .attr('shape-rendering', 'crispEdges');
-
-            enter.append('text')
-                .attr('x', d => d.width / 2)
-                .attr('y', d => d.height / 2)
+            const centerG = svg.append('g').attr('transform', `translate(${cx}, ${cy})`);
+            const centerW = Math.max(70, active.word.length * 9 + 22);
+            centerG.append('rect')
+                .attr('x', -centerW / 2)
+                .attr('y', -16)
+                .attr('width', centerW)
+                .attr('height', 32)
+                .attr('rx', 16)
+                .attr('fill', '#e9411b');
+            centerG.append('text')
                 .attr('text-anchor', 'middle')
                 .attr('dominant-baseline', 'central')
-                .attr('fill', '#000')
-                .attr('font-size', fontSize)
-                .attr('font-family', 'GT America, -apple-system, sans-serif')
-                .text(d => d.word);
+                .attr('fill', '#ffffff')
+                .style('font-size', '13px')
+                .style('font-weight', '700')
+                .text(active.word);
 
-            // Add click handler to show alternatives
-            enter.on('click', (event, d) => {
-                if (d.isInCorpus) {
-                    event.stopPropagation();
-                    // Toggle alternatives for this word
-                    if (this.hoveredWord === d.word) {
-                        this.hideAlternatives();
-                    } else {
-                        this.showAlternatives(d.word, d.x, d.y);
-                    }
-                }
-            });
-
-            const merged = enter.merge(boxes);
-
-            // Update class for has-alternatives and processing
-            merged.attr('class', d => {
-                let classes = 'word-box';
-                if (!d.isInCorpus) classes += ' disabled';
-                if (d.word === this.selectedWord) classes += ' selected';
-                if (d.isInCorpus && this.searchCache.has(d.word)) classes += ' has-alternatives';
-                if (this.processingWords.has(d.word)) classes += ' processing';
-                return classes;
-            });
-
-            merged
-                .transition()
-                .duration(150)  // Reduced from 300ms for instant feel
-                .attr('transform', d => `translate(${d.x}, ${d.y})`)
-                .style('opacity', 1);
-
-            merged.select('rect')
-                .transition()
-                .duration(100)  // Reduced from 200ms for instant feedback
-                .attr('stroke', d => d.word === this.selectedWord ? '#e9411b' : '#000')
-                .attr('stroke-opacity', d => {
-                    if (d.word === this.selectedWord) return 0.8;
-                    if (this.searchCache.has(d.word)) return 0.4;  // Darker for searched words
-                    return 0.16;  // Light for unsearched words
-                });
-        },
-
-        async showAlternatives(word, wordX, wordY) {
-            this.hoveredWord = word;
-            this.selectedWord = word;
-
-            // Get or fetch alternatives
-            let alts = [];
-            if (this.searchCache.has(word)) {
-                alts = this.searchCache.get(word);
-            } else {
-                alts = await this.searchWord(word);
-            }
-
-            // Show top 5
-            const top5 = alts.slice(0, 5);
-
-            // Position above the word
-            const boxHeight = 30;
-            const boxGap = 6;
-            const padding = 16;
-            const fontSize = 14;
-            const similarityFontSize = 10;
-
-            let currentY = wordY - 10; // Start above the word
-
-            // D3 binding for alternatives
-            const altBoxes = this.altGroup
-                .selectAll('.alt-box')
-                .data(top5, d => d.word);
-
-            altBoxes.exit().remove();
-
-            const altEnter = altBoxes.enter()
+            const nGroups = svg.selectAll('g.lex-node')
+                .data(nodes)
+                .enter()
                 .append('g')
-                .attr('class', 'alt-box')
-                .attr('data-word', d => d.word)
-                .style('opacity', 0);
+                .attr('class', 'lex-node')
+                .attr('transform', d => `translate(${d.x}, ${d.y})`)
+                .style('cursor', 'pointer')
+                .on('click', (_, d) => this.replaceSelectedWord(d.word));
 
-            // Create each alternative box
-            altEnter.each(function(d) {
-                const g = d3.select(this);
+            nGroups.append('rect')
+                .attr('x', d => -Math.max(54, d.word.length * 7.5 + 18) / 2)
+                .attr('y', -13)
+                .attr('width', d => Math.max(54, d.word.length * 7.5 + 18))
+                .attr('height', 26)
+                .attr('rx', 13)
+                .attr('fill', '#ffffff')
+                .attr('stroke', d => d.color)
+                .attr('stroke-width', 1.5);
 
-                // Measure text
-                const tempText = d3.select('#main-svg')
-                    .append('text')
-                    .attr('font-size', fontSize)
-                    .attr('font-family', 'GT America, -apple-system, sans-serif')
-                    .text(d.word);
+            nGroups.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'central')
+                .attr('fill', '#0f172a')
+                .style('font-size', '11.5px')
+                .style('font-weight', '600')
+                .text(d => d.word);
+        },
 
-                const bbox = tempText.node().getBBox();
-                tempText.remove();
+        enableNeuralReranker() {
+            if (this.rerankerReady || this.rerankerBusy) return;
+            this.rerankerBusy = true;
+            this.rerankerProgressText = 'Initializing MiniLM...';
+            const blob = new Blob([rerankerWorkerCode], { type: 'application/javascript' });
+            this.rerankerWorker = new Worker(URL.createObjectURL(blob), { type: 'module' });
+            this.rerankerWorker.onmessage = (e) => {
+                const { type, data } = e.data;
+                if (type === 'progress') {
+                    this.rerankerProgressText = `MiniLM (${data.percent}%)`;
+                } else if (type === 'ready') {
+                    this.rerankerBusy = false;
+                    this.rerankerReady = true;
+                    this.runNeuralRerank();
+                } else if (type === 'scored') {
+                    if (data.requestId === this.rerankSeq) {
+                        this.rerankScores = data.scores || {};
+                    }
+                } else if (type === 'error') {
+                    this.rerankerBusy = false;
+                    this.rerankerProgressText = 'Reranker unavailable';
+                }
+            };
+            this.rerankerWorker.postMessage({ type: 'init' });
+        },
 
-                const boxWidth = bbox.width + (padding * 2) + 30; // Extra space for similarity
-
-                d.boxWidth = boxWidth;
-                d.boxHeight = boxHeight;
-
-                // Background rect
-                g.append('rect')
-                    .attr('width', boxWidth)
-                    .attr('height', boxHeight)
-                    .attr('rx', 2)
-                    .attr('fill', '#fff')
-                    .attr('stroke', '#000')
-                    .attr('stroke-opacity', 0.16)
-                    .attr('shape-rendering', 'crispEdges');
-
-                // Word text
-                g.append('text')
-                    .attr('x', padding)
-                    .attr('y', boxHeight / 2)
-                    .attr('dominant-baseline', 'central')
-                    .attr('fill', '#000')
-                    .attr('font-size', fontSize)
-                    .attr('font-family', 'GT America, -apple-system, sans-serif')
-                    .text(d.word);
-
-                // Similarity badge at right boundary (middle of right edge)
-                const badgeText = `${d.similarity.toFixed(0)}%`;
-                const badgeWidth = 32;
-                const badgeHeight = 14;
-
-                // Position at right boundary, vertically centered
-                const badgeX = boxWidth + badgeWidth / 2;
-                const badgeY = boxHeight / 2;
-
-                // Background rectangle for badge
-                g.append('rect')
-                    .attr('class', 'alt-similarity-rect')
-                    .attr('x', boxWidth - 1)
-                    .attr('y', (boxHeight - badgeHeight) / 2)
-                    .attr('width', badgeWidth)
-                    .attr('height', badgeHeight)
-                    .attr('rx', 2);
-
-                // Badge text
-                g.append('text')
-                    .attr('class', 'alt-similarity-badge')
-                    .attr('x', badgeX)
-                    .attr('y', badgeY)
-                    .attr('text-anchor', 'middle')
-                    .attr('dominant-baseline', 'central')
-                    .attr('font-size', similarityFontSize)
-                    .attr('font-family', 'GT America, -apple-system, sans-serif')
-                    .text(badgeText);
+        runNeuralRerank() {
+            if (!this.rerankerReady || !this.rerankerWorker || !this.activeWord?.entry) return;
+            const entry = this.activeWord.entry;
+            const sentence = this.words.map(w => w.word).join(' ');
+            const anchorText = `${this.activeWord.word} in "${sentence}": ${(entry.d || []).join('; ')}`;
+            const allCands = Array.from(new Set([...(entry.s || []), ...(entry.h || []), ...(entry.y || []), ...(entry.a || [])]));
+            const candidates = allCands.map(w => {
+                const ce = this.lexicon?.[w];
+                return { word: w, text: ce?.d?.length ? `${w}: ${ce.d[0]}` : w };
             });
-
-            // Position boxes above the word
-            altEnter.each(function(d, i) {
-                currentY -= (boxHeight + boxGap);
-                d.y = currentY;
-            });
-
-            const altMerged = altEnter.merge(altBoxes);
-
-            altMerged
-                .transition()
-                .duration(200)
-                .attr('transform', d => `translate(${wordX}, ${d.y})`)
-                .style('opacity', 1);
-
-            // Click handler for alternatives
-            altMerged.on('click', (event, d) => {
-                this.replaceWord(word, d.word);
-                event.stopPropagation();
+            this.rerankSeq++;
+            this.rerankerWorker.postMessage({
+                type: 'score',
+                data: { requestId: this.rerankSeq, anchorText, candidates }
             });
         },
 
-        hideAlternatives() {
-            this.hoveredWord = null;
-            this.selectedWord = null;
-            this.altGroup.selectAll('.alt-box')
-                .transition()
-                .duration(200)
-                .style('opacity', 0)
-                .remove();
-
-            // Re-render to remove selection highlighting
-            this.renderWordBoxes();
-        },
-
-        async searchWord(word) {
-            // Guard: Check if corpus is loaded
-            if (!this.corpusData || !this.corpusData.words || !this.corpusData.embeddings) {
-                console.warn('⚠️ Corpus not loaded, cannot search for:', word);
-                return [];
-            }
-
-            if (this.searchCache.has(word)) {
-                return this.searchCache.get(word);
-            }
-
-            const wordIndex = this.corpusData.words.indexOf(word);
-            if (wordIndex === -1) return [];
-
-            const embeddingDim = 768;
-            const queryEmbedding = this.corpusData.embeddings.slice(
-                wordIndex * embeddingDim,
-                (wordIndex + 1) * embeddingDim
-            );
-
-            const similarities = [];
-            const numWords = this.corpusData.words.length;
-
-            for (let i = 0; i < numWords; i++) {
-                if (i === wordIndex) continue;
-
-                const candidateEmbedding = this.corpusData.embeddings.slice(
-                    i * embeddingDim,
-                    (i + 1) * embeddingDim
-                );
-
-                const similarity = this.cosineSimilarity(queryEmbedding, candidateEmbedding);
-                similarities.push({
-                    word: this.corpusData.words[i],
-                    similarity: similarity * 100
+        async loadOptionalDenseCorpus() {
+            if (this.denseReady || this.denseBusy || !window.corpusPreloader) return;
+            this.denseBusy = true;
+            this.denseProgressText = 'Starting download...';
+            try {
+                await window.corpusPreloader.startDownload((p) => {
+                    this.denseProgressText = `Downloading corpus (${p.percent}%)`;
                 });
+                const corpus = await window.corpusPreloader.getCorpus();
+                if (!corpus) throw new Error('Corpus unavailable');
+                const blob = new Blob([denseSearchWorkerCode], { type: 'application/javascript' });
+                this.denseWorker = new Worker(URL.createObjectURL(blob));
+                this.denseWorker.onmessage = (e) => {
+                    const { type, data } = e.data;
+                    if (type === 'corpus_ready') {
+                        this.denseBusy = false;
+                        this.denseReady = true;
+                        if (this.activeWord) {
+                            this.denseWorker.postMessage({ type: 'search', data: { word: this.activeWord.word } });
+                        }
+                    } else if (type === 'dense_results') {
+                        if (this.activeWord && data.word === this.activeWord.word) {
+                            this.denseNeighbors = data.results || [];
+                        }
+                    }
+                };
+                this.denseWorker.postMessage({
+                    type: 'set_corpus',
+                    data: { words: corpus.words, embeddings: corpus.embeddings }
+                });
+            } catch (err) {
+                this.denseBusy = false;
+                this.denseProgressText = 'Corpus unavailable (using WordNet 3.1)';
+                console.warn('Optional 147K corpus error:', err);
             }
-
-            similarities.sort((a, b) => b.similarity - a.similarity);
-            const results = similarities.slice(0, 30);
-
-            this.searchCache.set(word, results);
-
-            // Update UI with debounce to avoid multiple re-renders during batch search
-            this.renderWordBoxesDebounced();
-
-            return results;
-        },
-
-        async searchWordWithIndicator(word) {
-            // Mark as processing - immediate render to show orange pulse
-            this.processingWords.add(word);
-            this.renderWordBoxesDebounced();
-
-            // Add configurable delay before starting search (allows user to see processing indicator)
-            await new Promise(resolve => setTimeout(resolve, this.searchDelay));
-
-            // Perform search in background (truly async)
-            const results = await this.searchWord(word);
-
-            // Mark as complete
-            this.processingWords.delete(word);
-            this.renderWordBoxesDebounced();
-
-            return results;
-        },
-
-        cosineSimilarity(a, b) {
-            let dotProduct = 0;
-            let normA = 0;
-            let normB = 0;
-
-            for (let i = 0; i < a.length; i++) {
-                dotProduct += a[i] * b[i];
-                normA += a[i] * a[i];
-                normB += b[i] * b[i];
-            }
-
-            return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-        },
-
-        replaceWord(oldWord, newWord) {
-            const index = this.words.indexOf(oldWord);
-            if (index !== -1) {
-                this.words[index] = newWord;
-                this.inputText = this.words.join(' ');
-                this.renderWordBoxes();
-                this.hideAlternatives();
-            }
-        },
-
-        measureText(text, fontSize) {
-            const temp = this.svg.append('text')
-                .attr('font-size', fontSize)
-                .attr('font-family', 'GT America, -apple-system, sans-serif')
-                .text(text);
-
-            const bbox = temp.node().getBBox();
-            temp.remove();
-
-            return bbox.width;
         },
 
         copyText() {
-            const textToCopy = this.words.join(' ');
-
-            // Check if Clipboard API is available
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                // Modern Clipboard API
-                navigator.clipboard.writeText(textToCopy).then(() => {
+            const text = this.words.map(w => w.word).join(' ');
+            if (!text) return;
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
                     this.copySuccess = true;
-                    setTimeout(() => {
-                        this.copySuccess = false;
-                    }, 2000);
-                    console.log('✓ Copied:', textToCopy);
-                }).catch(err => {
-                    console.error('Copy failed:', err);
-                    this.fallbackCopy(textToCopy);
-                });
-            } else {
-                // Fallback for older browsers or non-secure contexts
-                this.fallbackCopy(textToCopy);
-            }
-        },
-
-        fallbackCopy(text) {
-            // Create temporary textarea
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            document.body.appendChild(textarea);
-            textarea.select();
-
-            try {
-                const successful = document.execCommand('copy');
-                if (successful) {
-                    this.copySuccess = true;
-                    setTimeout(() => {
-                        this.copySuccess = false;
-                    }, 2000);
-                    console.log('✓ Copied (fallback):', text);
-                } else {
-                    console.error('Fallback copy failed');
-                }
-            } catch (err) {
-                console.error('Fallback copy error:', err);
-            } finally {
-                document.body.removeChild(textarea);
+                    setTimeout(() => { this.copySuccess = false; }, 1800);
+                }).catch(() => {});
             }
         },
 
         clearAll() {
             this.inputText = '';
             this.words = [];
-            this.currentWord = '';
-            this.selectedWord = null;
-            this.alternatives = [];
-            this.hoveredWord = null;
-            this.copySuccess = false;
-            this.renderWordBoxes();
-            this.hideAlternatives();
-
-            document.getElementById('text-input').focus();
+            this.selectedIdx = null;
+            this.rerankScores = {};
+            this.denseNeighbors = [];
+            document.getElementById('text-input')?.focus();
         },
 
-        // Speech Recognition Methods
         initSpeechRecognition() {
-            // Check for browser support
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-            if (!SpeechRecognition) {
-                console.warn('Speech Recognition not supported in this browser');
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SR) {
                 this.speechSupported = false;
                 return;
             }
-
             this.speechSupported = true;
-            this.recognition = new SpeechRecognition();
-
-            // Configure recognition
-            this.recognition.continuous = true;  // Keep listening
-            this.recognition.interimResults = true;  // Get partial results
-            this.recognition.lang = 'en-US';  // Language
-            this.recognition.maxAlternatives = 1;
-
-            // Handle results
+            this.recognition = new SR();
+            this.recognition.continuous = true;
+            this.recognition.interimResults = true;
+            this.recognition.lang = 'en-US';
             this.recognition.onresult = (event) => {
-                let interimTranscript = '';
-                let finalTranscript = '';
-
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
-
                     if (event.results[i].isFinal) {
-                        finalTranscript += transcript + ' ';
-                    } else {
-                        interimTranscript += transcript;
+                        this.appendWordsFromText(event.results[i][0].transcript);
                     }
                 }
-
-                // Update status
-                if (interimTranscript) {
-                    this.recordingStatus = `Heard: "${interimTranscript}"`;
-                }
-
-                // Process final transcripts into words
-                if (finalTranscript) {
-                    console.log('Final transcript:', finalTranscript);
-                    this.processSpokenText(finalTranscript);
-                }
             };
-
-            // Handle errors
-            this.recognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
-
-                if (event.error === 'no-speech') {
-                    this.recordingStatus = 'No speech detected...';
-                } else if (event.error === 'network') {
-                    this.recordingStatus = 'Network error';
-                    this.stopRecording();
-                } else {
-                    this.recordingStatus = `Error: ${event.error}`;
-                }
-            };
-
-            // Handle end
-            this.recognition.onend = () => {
-                if (this.isRecording) {
-                    // Restart if still recording (for continuous mode)
-                    this.recognition.start();
-                }
-            };
-
-            // Handle start
-            this.recognition.onstart = () => {
-                this.recordingStatus = 'Listening...';
-                console.log('Speech recognition started');
-            };
-
-            console.log('✓ Speech Recognition initialized');
-        },
-
-        processSpokenText(text) {
-            // Convert spoken text to words
-            const spokenWords = text
-                .toLowerCase()
-                .split(/[\s.,!?;:]+/)
-                .map(w => w.replace(/[^a-z]/g, ''))
-                .filter(w => w.length > 0);
-
-            console.log('Processing spoken words:', spokenWords);
-
-            // Add unique words
-            const newWords = [];
-            spokenWords.forEach(word => {
-                if (!this.words.includes(word)) {
-                    this.words.push(word);
-                    newWords.push(word);
-                }
-            });
-
-            if (newWords.length > 0) {
-                // Render boxes immediately
-                this.renderWordBoxes();
-
-                // Start searches for valid words
-                const validWords = newWords.filter(w =>
-                    this.corpusData.words.includes(w) && !this.searchCache.has(w)
-                );
-
-                console.log(`Added ${newWords.length} words from speech, ${validWords.length} need searching`);
-
-                // Search with visual feedback
-                setTimeout(() => {
-                    validWords.forEach(word => this.searchWordWithIndicator(word));
-                }, 0);
-            }
+            this.recognition.onend = () => { this.isRecording = false; };
+            this.recognition.onerror = () => { this.isRecording = false; };
         },
 
         toggleRecording() {
-            if (!this.speechSupported) {
-                alert('Speech Recognition is not supported in this browser.\n\nPlease use Chrome, Edge, or Safari.');
-                return;
-            }
-
+            if (!this.speechSupported || !this.recognition) return;
             if (this.isRecording) {
-                this.stopRecording();
-            } else {
-                this.startRecording();
-            }
-        },
-
-        startRecording() {
-            try {
-                this.recognition.start();
-                this.isRecording = true;
-                console.log('🎤 Recording started');
-            } catch (error) {
-                console.error('Failed to start recording:', error);
-                this.recordingStatus = 'Failed to start';
-            }
-        },
-
-        stopRecording() {
-            try {
                 this.recognition.stop();
                 this.isRecording = false;
-                this.recordingStatus = 'Stopped';
-                console.log('⏹ Recording stopped');
-            } catch (error) {
-                console.error('Failed to stop recording:', error);
-            }
-        }
-    },
-
-    watch: {
-        'corpusData.words'() {
-            if (this.words.length > 0) {
-                this.renderWordBoxes();
+            } else {
+                this.recognition.start();
+                this.isRecording = true;
             }
         }
     }
