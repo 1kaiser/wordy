@@ -417,6 +417,12 @@
     </style>
 </head>
 <body>
+    <div style="position: fixed; top: 14px; left: 16px; z-index: 1000; display: flex; gap: 8px; align-items: center; background: rgba(255,255,255,0.92); border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 12px; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+        <a href="https://1kaiser.github.io/" style="color: #1f2937; font-weight: 600; text-decoration: none;">&larr; 1kaiser.github.io</a>
+        <span style="color: #d1d5db;">|</span>
+        <a href="https://github.com/1kaiser/wordy" target="_blank" rel="noopener" style="color: #4b5563; text-decoration: none;">GitHub</a>
+        <button id="wordy-refs-btn" type="button" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 12px; color: #111827;">References</button>
+    </div>
     <!-- Toggle Buttons -->
     <button class="toggle-btn muvera-toggle-btn" onclick="toggleMuVeRa()">
         🔄 MuVeRa Search
@@ -595,6 +601,32 @@
                 }
             }
         }, true);  // Use capture phase to intercept ESC before Vue
+    </script>
+
+    <div id="wordy-refs-modal" style="display: none; position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.45); align-items: center; justify-content: center; padding: 20px;">
+        <div style="background: #fff; border-radius: 12px; max-width: 580px; width: 100%; padding: 20px 24px; box-shadow: 0 12px 32px rgba(0,0,0,0.2); font-size: 13px; color: #374151; line-height: 1.65;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;">
+                <strong style="font-size: 15px; color: #111827;">Wordy References &amp; Citations</strong>
+                <button id="wordy-refs-close" type="button" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 4px 10px; cursor: pointer;">Close</button>
+            </div>
+            <ul style="margin: 0; padding-left: 18px;">
+                <li><strong>WordNet 3.1:</strong> Miller, G. A. (1995), <em>WordNet: A Lexical Database for English</em>, CACM 38(11); Fellbaum, C. (1998), <em>WordNet: An Electronic Lexical Database</em>, MIT Press (<a href="https://wordnet.princeton.edu/" target="_blank" rel="noopener">wordnet.princeton.edu</a>).</li>
+                <li><strong>MUVERA Retrieval:</strong> Jayaram, R., Dhulipala, L., Hadian, M., Lee, J., &amp; Mirrokni, V. (2024). <a href="https://arxiv.org/abs/2405.19504" target="_blank" rel="noopener">arXiv:2405.19504</a>.</li>
+                <li><strong>Models &amp; Runtime:</strong> Google <a href="https://arxiv.org/abs/2503.19786" target="_blank" rel="noopener">Gemma 3 270M</a>, <a href="https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX" target="_blank" rel="noopener">EmbeddingGemma-300M</a>, <a href="https://huggingface.co/docs/transformers.js" target="_blank" rel="noopener">Transformers.js</a>, <a href="https://vuejs.org/" target="_blank" rel="noopener">Vue 3</a> &amp; <a href="https://d3js.org/" target="_blank" rel="noopener">D3.js v7</a>.</li>
+                <li><strong>Home:</strong> <a href="https://1kaiser.github.io/">1kaiser.github.io</a> &middot; <a href="https://github.com/1kaiser/wordy" target="_blank" rel="noopener">1kaiser/wordy</a>.</li>
+            </ul>
+        </div>
+    </div>
+    <script>
+        (function () {
+            const modal = document.getElementById('wordy-refs-modal');
+            const openBtn = document.getElementById('wordy-refs-btn');
+            const closeBtn = document.getElementById('wordy-refs-close');
+            if (!modal || !openBtn) return;
+            openBtn.addEventListener('click', () => { modal.style.display = 'flex'; });
+            if (closeBtn) closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+            modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+        })();
     </script>
 </body>
 </html>

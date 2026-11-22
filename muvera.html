@@ -2,7 +2,6 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MuVeRa FDE Construction + EmbeddingGemma</title>
     <script src="https://d3js.org/d3.v5.min.js"></script>
@@ -415,6 +414,14 @@
     </style>
   </head>
   <body>
+    <nav style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; font-size: 13px;">
+      <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+        <a href="https://1kaiser.github.io/" style="color: #1a73e8; text-decoration: none; font-weight: 600;">&larr; 1kaiser.github.io</a>
+        <a href="./index.html" style="color: #5f6368; text-decoration: none; font-weight: 500;">&larr; Wordy Explorer</a>
+        <a href="./rag-demo.html" style="color: #5f6368; text-decoration: none; font-weight: 500;">RAG Pipeline</a>
+      </div>
+      <a href="https://github.com/1kaiser/wordy" target="_blank" rel="noopener" style="color: #5f6368; text-decoration: none;">GitHub</a>
+    </nav>
     <!-- EmbeddingGemma Loading Section -->
     <div class="input-controls">
       <h2>🤖 EmbeddingGemma Model Loading</h2>
@@ -727,5 +734,14 @@
     </script>
     
     <script type="module" src="/src/main.ts"></script>
+
+    <footer style="margin-top: 32px; padding: 16px 20px; background: #fff; border: 1px solid #e0e0e0; font-size: 12px; color: #5f6368; line-height: 1.6;">
+      <strong>References &amp; Attribution:</strong>
+      Jayaram, R., Dhulipala, L., Hadian, M., Lee, J., &amp; Mirrokni, V. (2024).
+      <em>MUVERA: Making Multi-Vector Retrieval as Fast as Single-Vector Search</em> (<a href="https://arxiv.org/abs/2405.19504" target="_blank" rel="noopener">arXiv:2405.19504</a>).
+      Semantic embeddings powered by <a href="https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX" target="_blank" rel="noopener">EmbeddingGemma-300M</a>,
+      <a href="https://huggingface.co/docs/transformers.js" target="_blank" rel="noopener">Transformers.js</a>, and <a href="https://d3js.org/" target="_blank" rel="noopener">D3.js</a>.
+      Part of <a href="https://1kaiser.github.io/">1kaiser.github.io</a>.
+    </footer>
   </body>
 </html>

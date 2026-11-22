@@ -270,6 +270,14 @@
 </head>
 <body>
     <div class="container">
+        <nav style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; font-size: 13px;">
+            <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+                <a href="https://1kaiser.github.io/" style="color: #e9411b; text-decoration: none; font-weight: 600;">&larr; 1kaiser.github.io</a>
+                <a href="./index.html" style="color: #555; text-decoration: none; font-weight: 500;">&larr; Wordy Explorer</a>
+                <a href="./muvera.html" style="color: #555; text-decoration: none; font-weight: 500;">MUVERA FDE</a>
+            </div>
+            <a href="https://github.com/1kaiser/wordy" target="_blank" rel="noopener" style="color: #555; text-decoration: none;">GitHub</a>
+        </nav>
         <h1>🤖 RAG Pipeline Demo - WordNet + Gemma 3</h1>
         <p style="margin-bottom: 20px; color: #666;">Retrieval-Augmented Generation with 147,480 words</p>
 
@@ -629,5 +637,13 @@
         // Start initialization
         initialize();
     </script>
+
+    <footer style="max-width: 1000px; margin: 24px auto 8px; padding: 14px 18px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.06); font-size: 12px; color: #555; line-height: 1.6;">
+        <strong>References &amp; Attribution:</strong>
+        Lexical corpus derived from <strong>WordNet 3.1</strong> (Miller, 1995, <em>CACM</em> 38(11); Fellbaum, 1998, MIT Press, <a href="https://wordnet.princeton.edu/" target="_blank" rel="noopener">wordnet.princeton.edu</a>).
+        Dense retrieval &amp; generation powered by <a href="https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX" target="_blank" rel="noopener">EmbeddingGemma-300M</a>,
+        Google <strong>Gemma 3 270M</strong> (<a href="https://arxiv.org/abs/2503.19786" target="_blank" rel="noopener">arXiv:2503.19786</a>), and <a href="https://huggingface.co/docs/transformers.js" target="_blank" rel="noopener">Transformers.js</a>.
+        Part of <a href="https://1kaiser.github.io/">1kaiser.github.io</a>.
+    </footer>
 </body>
 </html>

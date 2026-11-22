@@ -329,13 +329,12 @@ MIT License - see LICENSE file for details
 
 ---
 
-## 🙏 Acknowledgments
+## 📚 References & Citations
 
-- **Google Research** - MuVeRa algorithm & EmbeddingGemma model
-- **Princeton University** - WordNet 3.1 linguistic database
-- **Google** - Gemma-3-270M language model
-- **Xenova** - Transformers.js browser AI library
-- **Hugging Face** - Model hosting & transformers library
+1. **WordNet 3.1:** Miller, G. A. (1995). *WordNet: A Lexical Database for English*, *CACM* 38(11):39–41; Fellbaum, C. (1998). *WordNet: An Electronic Lexical Database*, MIT Press ([wordnet.princeton.edu](https://wordnet.princeton.edu/)).
+2. **MUVERA Multi-Vector Retrieval:** Jayaram, R., Dhulipala, L., Hadian, M., Lee, J., & Mirrokni, V. (2024). *MUVERA: Making Multi-Vector Retrieval as Fast as Single-Vector Search* ([arXiv:2405.19504](https://arxiv.org/abs/2405.19504)).
+3. **Models & Inference:** Gemma Team (2025), *Gemma 3 Technical Report* ([arXiv:2503.19786](https://arxiv.org/abs/2503.19786)), EmbeddingGemma-300M, [Transformers.js](https://huggingface.co/docs/transformers.js), [Vue.js 3](https://vuejs.org/), and [D3.js v7](https://d3js.org/).
+4. **Portfolio Home:** [1kaiser.github.io](https://1kaiser.github.io/)
 
 ---
 
